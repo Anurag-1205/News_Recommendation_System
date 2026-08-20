@@ -1,0 +1,37 @@
+# --- required by A1 Q8 / CLAUDE.md §3 ---
+*.zip
+*.pt
+*.ckpt
+__pycache__/
+data/
+
+# --- environment ---
+.venv/
+venv/
+*.pyc
+.python-version
+
+# --- caches ---
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+
+# --- large artifacts, even outside data/ ---
+*.parquet
+*.npy
+*.faiss
+*.bin
+*.tar.gz
+
+# --- editors ---
+.vscode/
+.idea/
+
+# --- local working docs and third-party material, not A1 deliverables ---
+CLAUDE.md
+PLAN.md
+ebnerd_analysis.ipynb
+mind_analysis.ipynb
+
+# --- exception: toy fixtures oracle the retrievers (CLAUDE.md rule 2) and must be committed ---
+!tests/fixtures/**

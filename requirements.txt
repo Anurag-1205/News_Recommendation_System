@@ -1,0 +1,17 @@
+# P0.5 dependency list. Versions are pinned with == once `pip install` resolves them on
+# Python 3.12.3 and `pip freeze` reports what actually landed — see SPEC.md §7.
+# Install is currently blocked on the network (SPEC.md §11).
+#
+# NOTE: scikit-learn and rank-bm25 are ORACLE ONLY. BM25 is hand-written (SPEC.md §10.3);
+# rank_bm25 exists to disagree with ours and expose bugs, not to be the implementation.
+
+polars
+pyarrow
+numpy
+scikit-learn        # ORACLE ONLY — roc_auc_score cross-check
+faiss-cpu
+rank-bm25           # ORACLE ONLY — cross-check our BM25 ranking
+pytest
+tqdm
+matplotlib
+huggingface_hub[cli]

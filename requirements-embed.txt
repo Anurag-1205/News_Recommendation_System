@@ -1,0 +1,7 @@
+# Deferred to P4 (semantic retrieval). ~2.5 GB installed — not part of the P0 environment.
+# May prove unnecessary: MIND ships 100-dim TransE entity embeddings and EB-NeRD ships article
+# embeddings, so a torch-free semantic path exists. Decide at P4 (SPEC.md §10.4).
+
+torch
+transformers
+sentence-transformers
