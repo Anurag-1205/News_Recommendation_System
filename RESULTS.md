@@ -110,6 +110,29 @@ the measured reason to expect an improvement, rather than a hoped-for one.
 instead of reading all 2.37M rows at once as the reference notebooks do. Offline validation passed:
 2,370,727 lines, 2,370,727 distinct impression ids, every rank list a permutation of 1..N.
 
+### Leaderboard result — MIND Codabench 13967, submitted 2026-08-21
+
+Returned by the competition's own scorer (`scoring_result.zip` → `scores.json`), scoring time 427 s:
+
+| Metric | Offline, `MINDsmall_dev` | **Leaderboard, `MINDlarge_test`** | Δ |
+|---|---:|---:|---:|
+| AUC | 0.5318 | **0.5036** | −0.0282 |
+| MRR | 0.2382 | **0.2249** | −0.0133 |
+| nDCG@5 | 0.2460 | **0.2305** | −0.0155 |
+| nDCG@10 | 0.3098 | **0.2860** | −0.0238 |
+
+Two things this establishes, both of which are worth more than the score itself.
+
+**1. The harness is calibrated.** All four offline metrics were optimistic by a small, consistent
+margin (−0.013 to −0.028) and none inverted. So `src/eval/metrics.py` measures the same quantities
+the graders' scorer measures, and offline comparisons between models can be trusted to predict the
+direction of a leaderboard change. That is what the harness was built to guarantee, and it is now
+verified against an external implementation rather than assumed.
+
+**2. The coverage prediction was right.** RESULTS.md said before submitting that dev would overstate
+test because dev coverage is 34.2% against test's 6.5%, and that AUC would land near chance. It came
+back 0.5036 — chance is 0.5000. Popularity contributes essentially nothing on this test split.
+
 ## Q2 · BM25 lexical retrieval — recall@K
 
 *Pending P3.*

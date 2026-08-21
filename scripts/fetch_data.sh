@@ -68,11 +68,16 @@ case "${1:-}" in
     get $S3/ebnerd_small.zip                                   # 0.08 GB
     ;;
   large)
-    get $S3/ebnerd_large.zip                                   # 2.97 GB
-    get $S3/ebnerd_testset.zip                                 # 1.52 GB
+    # Ordered by what the submission actually blocks on, not by size.
+    # ebnerd_testset.zip carries its own articles.parquet AND the 13.5M unlabelled test
+    # impressions, so it alone is enough to produce a Codabench file when the ranker is fitted
+    # on ebnerd_small. ebnerd_large.zip (3.0 GB) only buys better training statistics, so it
+    # comes last -- fetching it first blocks the deliverable behind the optional part.
+    get $S3/ebnerd_testset.zip                                 # 1.52 GB  REQUIRED for submission
     get $S3/articles_large_only.zip                            # 0.14 GB  bucket ROOT, not artifacts/
     get $S3/artifacts/Ekstra_Bladet_word2vec.zip               # 0.13 GB
     get $S3/artifacts/google_bert_base_multilingual_cased.zip  # 0.34 GB
+    get $S3/ebnerd_large.zip                                   # 2.97 GB  optional: better stats
     ;;
   mind)
     # yjw1029/MIND is gated (`gated: auto`): every resolve/ URL 401s until you have accepted the
