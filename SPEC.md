@@ -103,8 +103,9 @@ candidate in the impression's candidate list, so candidate order must be preserv
   Competition page: **not yet read.**
 - Example line: `1 [5,4,9,16,11,2,1,15,7,12,13,3,6,14,8,10]`
 - Scoring: `1/rank` — lower rank = higher score
-- File: `prediction.txt` → zipped to `mind_prediction.zip`
-- Covers: all 2,370,727 impressions of `MINDlarge_test`
+- File: `prediction.txt` → zipped to `mind_prediction.zip`, .txt at the archive root
+- Covers: all 2,370,727 impressions of `MINDlarge_test` — **confirmed against the real file**
+- Enforced by `tests/test_submission_format.py` and `validate_file()`, run before every upload
 
 ### §6.2 EB-NeRD — Codabench 2469
 - Source: TA reference notebook (EB-NeRD), cell 22. Competition page: **not yet read.**
@@ -168,6 +169,7 @@ deviation only if recorded here, so the additions are written down rather than a
 | `requirements.txt`, `requirements-embed.txt` | P0 pins dependency versions |
 | `scripts/fetch_data.sh` | P0 downloads; resilience flags documented in-file |
 | `report/` | P5 leaderboard screenshots land here |
+| `src/baselines/` | non-retrieval reference scorers (popularity); keeps them out of `lexical/`/`semantic/` |
 
 Not committed, by decision: the assignment's own working notes, and the TA-provided reference
 notebooks (`ebnerd_analysis` / `mind_analysis`) — third-party material rather than deliverables.

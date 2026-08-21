@@ -33,5 +33,8 @@ PLAN.md
 ebnerd_analysis.ipynb
 mind_analysis.ipynb
 
+# --- prompts/ is a graded deliverable but is pushed once, at the final submission ---
+prompts/
+
 # --- exception: toy fixtures oracle the retrievers (CLAUDE.md rule 2) and must be committed ---
 !tests/fixtures/**

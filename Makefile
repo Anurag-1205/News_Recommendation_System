@@ -1,4 +1,4 @@
-.PHONY: help env fetch-small fetch-large fetch-mind data test eval bench clean-pyc
+.PHONY: help env fetch-small fetch-large fetch-mind data test eval bench submit-mind clean-pyc
 .DEFAULT_GOAL := help
 
 VENV := .venv
@@ -29,7 +29,10 @@ data:  ## rebuild raw -> feature store (Q1: one command, from raw)
 	@echo "make data: not implemented (P1)"; exit 1
 
 test: env  ## run the test suite, incl. the no-leakage assertion (Q9)
-	$(VENV)/bin/pytest tests/ -v
+	PYTHONPATH=. $(VENV)/bin/pytest tests/ -v
+
+submit-mind: env  ## fit popularity, measure on dev, write + validate the MIND submission
+	PYTHONPATH=. $(PY) scripts/make_submission_mind.py
 
 eval:  ## metrics table for a predictions file + split (Q4)
 	@echo "make eval: not implemented (P2)"; exit 1

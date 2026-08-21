@@ -75,12 +75,30 @@ case "${1:-}" in
     get $S3/artifacts/google_bert_base_multilingual_cased.zip  # 0.34 GB
     ;;
   mind)
-    # yjw1029/MIND is gated (`gated: auto`): every resolve/ URL 401s until you have
-    # accepted the terms at https://huggingface.co/datasets/yjw1029/MIND and run `hf auth login`.
-    # MINDlarge_train/dev are deliberately NOT fetched — A1 needs only MINDlarge_test.zip
-    # for the leaderboard, and they would cost several GB of a 53 GB disk budget.
-    hf download yjw1029/MIND --repo-type dataset --local-dir "$MIND" \
-       --include "MINDsmall_train.zip" "MINDsmall_dev.zip" "MINDlarge_test.zip"
+    # yjw1029/MIND is gated (`gated: auto`): every resolve/ URL 401s until you have accepted the
+    # terms at https://huggingface.co/datasets/yjw1029/MIND and run `hf auth login`.
+    #
+    # We read the saved token and fetch with wget rather than shelling out to `hf download`, so
+    # this works before huggingface_hub is installed AND so the transfers get the same retry
+    # supervision as the S3 ones — which matters far more on this link than the CLI's niceties.
+    #
+    # MINDlarge_train/dev are deliberately NOT fetched: A1 needs only MINDlarge_test.zip for the
+    # leaderboard, and popularity/BM25 statistics come from MINDsmall_train.
+    TOKEN_FILE="${HF_TOKEN_FILE:-$HOME/.cache/huggingface/token}"
+    [[ -r "$TOKEN_FILE" ]] || { echo "no HF token at $TOKEN_FILE — run 'hf auth login'" >&2; exit 3; }
+
+    # The token goes in a 0600 wgetrc, NOT in --header on the command line: argv is world-readable
+    # via `ps`, so a bearer token there leaks to every user on the machine. Trapped so it is
+    # removed even if the fetch is interrupted.
+    WGETRC_TMP=$(mktemp); chmod 600 "$WGETRC_TMP"
+    trap 'rm -f "$WGETRC_TMP"' EXIT INT TERM
+    printf 'header = Authorization: Bearer %s\n' "$(tr -d '[:space:]' < "$TOKEN_FILE")" > "$WGETRC_TMP"
+    WGET_RESILIENT+=(--config="$WGETRC_TMP")
+    EB="$MIND"   # `get` writes to $EB; point it at the MIND directory
+    HF=https://huggingface.co/datasets/yjw1029/MIND/resolve/main
+    get $HF/MINDsmall_train.zip   #  50.5 MB — popularity/BM25 statistics
+    get $HF/MINDsmall_dev.zip     #  29.5 MB — offline validation with labels
+    get $HF/MINDlarge_test.zip    # 576.6 MB — the Codabench test set
     ;;
   *)
     echo "usage: $0 {small|large|mind}" >&2; exit 2
