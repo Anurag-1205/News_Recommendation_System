@@ -95,7 +95,7 @@ class TestValidateFile:
 
     def test_accepts_a_good_file(self, tmp_path):
         p = self._write(tmp_path, ["1 [1,2]", "2 [2,1,3]"])
-        assert validate_file(p) == {"lines": 2, "impressions": 2}
+        assert validate_file(p) == {"lines": 2, "impressions": 2, "duplicate_rows": 0}
 
     def test_rejects_duplicate_impression(self, tmp_path):
         p = self._write(tmp_path, ["1 [1,2]", "1 [2,1]"])
@@ -127,3 +127,35 @@ def test_zip_puts_txt_at_archive_root(tmp_path):
     txt.write_text("1 [1]\n")
     z = zip_submission(txt, tmp_path / "s.zip")
     assert zipfile.ZipFile(z).namelist() == ["prediction.txt"]
+
+
+class TestDuplicateIdPolicy:
+    """EB-NeRD zeroes impression_id on its 200,000 beyond-accuracy rows, so duplicates are
+    legitimate there and a bug on MIND. The policy is therefore explicit, never inferred."""
+
+    def _write(self, tmp_path, lines):
+        p = tmp_path / "predictions.txt"
+        p.write_text("".join(f"{ln}\n" for ln in lines))
+        return p
+
+    def test_duplicates_rejected_by_default(self, tmp_path):
+        p = self._write(tmp_path, ["0 [1,2]", "0 [2,1]", "5 [1]"])
+        with pytest.raises(ValueError, match="duplicate"):
+            validate_file(p)
+
+    def test_duplicates_allowed_when_opted_in(self, tmp_path):
+        p = self._write(tmp_path, ["0 [1,2]", "0 [2,1]", "5 [1]"])
+        out = validate_file(p, allow_duplicate_ids=True)
+        assert out["lines"] == 3
+        assert out["impressions"] == 2          # distinct ids: 0 and 5
+        assert out["duplicate_rows"] == 1       # one row beyond the distinct count
+
+    def test_duplicate_row_count_is_reported_even_when_zero(self, tmp_path):
+        p = self._write(tmp_path, ["1 [1]", "2 [1]"])
+        assert validate_file(p)["duplicate_rows"] == 0
+
+    def test_permutation_check_still_applies_to_duplicated_ids(self, tmp_path):
+        """Relaxing the id check must not relax anything else."""
+        p = self._write(tmp_path, ["0 [1,2]", "0 [1,1]"])
+        with pytest.raises(ValueError, match="permutation"):
+            validate_file(p, allow_duplicate_ids=True)

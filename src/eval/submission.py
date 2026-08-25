@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import zipfile
+from array import array
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -65,33 +66,56 @@ def validate_file(
     path: Path | str,
     expected_ids: Iterable[int] | None = None,
     expected_lengths: dict[int, int] | None = None,
+    allow_duplicate_ids: bool = False,
 ) -> dict:
     """Validate a whole submission offline, before uploading.
 
     A rejected upload costs a full regeneration pass, so every check that can run locally
     runs locally: syntax, permutation validity, no duplicate impressions, complete
     coverage of the expected id set, and per-impression candidate counts.
+
+    `allow_duplicate_ids` exists because EB-NeRD needs it and MIND does not. EB-NeRD's test
+    set carries 200,000 rows whose `impression_id` is **0** -- exactly and only the rows
+    flagged `is_beyond_accuracy`, which are scored for diversity/novelty/coverage rather
+    than accuracy. Those lines are legitimately repeated and are matched by file order.
+    MIND's ids are genuinely unique, so it keeps the check on: a duplicate there is a bug.
     """
-    seen: set[int] = set()
+    # Ids go into a typed array, not a Python set. EB-NeRD's test file is 13,536,710 lines;
+    # a set of that many boxed ints costs upwards of 600 MB, where 8-byte slots cost ~108 MB.
+    # Duplicate detection is deferred to a single sort at the end, which is both cheaper and
+    # bounded.
+    ids = array("q")
     n_lines = 0
     for n_lines, line in enumerate(Path(path).open(), start=1):
         impression_id, ranks = validate_line(line)
-        if impression_id in seen:
-            raise ValueError(f"duplicate impression_id {impression_id} at line {n_lines}")
-        seen.add(impression_id)
+        ids.append(impression_id)
         if expected_lengths is not None:
             want = expected_lengths.get(impression_id)
             if want is not None and want != len(ranks):
                 raise ValueError(
                     f"impression {impression_id}: {len(ranks)} ranks but {want} candidates"
                 )
+
+    import numpy as np
+
+    arr = np.frombuffer(ids, dtype=np.int64)
+    uniq = np.unique(arr)
+    n_duplicate_rows = len(arr) - len(uniq)
+    if n_duplicate_rows and not allow_duplicate_ids:
+        counts = np.bincount(np.searchsorted(uniq, arr))
+        dupe = uniq[np.argmax(counts)]
+        raise ValueError(f"duplicate impression_id {dupe} ({counts.max()} occurrences)")
+
     if expected_ids is not None:
-        expected = set(expected_ids)
-        if missing := expected - seen:
-            raise ValueError(f"{len(missing)} impressions missing, e.g. {sorted(missing)[:5]}")
-        if extra := seen - expected:
-            raise ValueError(f"{len(extra)} unexpected impressions, e.g. {sorted(extra)[:5]}")
-    return {"lines": n_lines, "impressions": len(seen)}
+        expected = np.unique(np.fromiter(expected_ids, dtype=np.int64))
+        missing = np.setdiff1d(expected, uniq, assume_unique=True)
+        if len(missing):
+            raise ValueError(f"{len(missing)} impressions missing, e.g. {missing[:5].tolist()}")
+        extra = np.setdiff1d(uniq, expected, assume_unique=True)
+        if len(extra):
+            raise ValueError(f"{len(extra)} unexpected impressions, e.g. {extra[:5].tolist()}")
+    return {"lines": n_lines, "impressions": int(len(uniq)),
+            "duplicate_rows": int(n_duplicate_rows)}
 
 
 def zip_submission(txt_path: Path | str, zip_path: Path | str) -> Path:

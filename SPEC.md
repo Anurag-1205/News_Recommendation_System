@@ -49,17 +49,46 @@ Source-specific facts that the two readers must reconcile (from the TA notebooks
 | Labels | `-1` / `-0` suffix | `article_ids_clicked` list[int32] |
 | Entity embeddings | ✅ TransE 100-dim, shipped | ❌ (separate download) |
 
-## §3 Temporal split — N and M **[TBD@P1]**
+## §3 Temporal split — N and M **[P1, measured 2026-08-22]**
 
-Never random — interaction data is split by time or not at all. Last N days = test,
-preceding M days = validation.
-N and M are chosen from the **actual** timestamp range once the data lands, and recorded here
-with the range that justified them.
+Never random — interaction data is split by time or not at all. Enforced by
+`tests/test_no_leakage.py::TestTemporalSplit::test_random_split_would_be_rejected`, which
+shuffles a frame and asserts the detector rejects it.
 
-Known ranges (TA notebooks, to be re-verified from the files):
-- **EB-NeRD:** one week, 18–25 May 2023. Large ships `train/` and `validation/` as separate
-  directories already — §3 must record whether we honour that boundary or re-split.
-- **MIND:** Oct–Nov 2019; `MINDlarge_test` is 19–22 Nov 2019, strictly after train/dev.
+### MIND — measured from the files, not from documentation
+
+| Split | Range | Days | Rows | Users |
+|---|---|---:|---:|---:|
+| `MINDsmall_train` | 2019-11-09 00:00:19 → 2019-11-14 23:59:13 | 6 | 156,965 | 50,000 |
+| `MINDsmall_dev` | 2019-11-15 00:00:01 → 2019-11-15 23:58:03 | **1** | 73,152 | 50,000 |
+| `MINDlarge_test` | 2019-11-16 00:00:05 → 2019-11-22 23:59:58 | 7 | 2,370,727 | 702,005 |
+
+**Correction:** §9 previously recorded `MINDlarge_test` as 19–22 Nov, taken from the TA
+reference notebook. Measured from the file it is **16–22 Nov**. The notebook was wrong, which
+is why every fact of this kind is re-derived from the data before it is used.
+
+The three splits are already strictly temporal and disjoint, with dev occupying the single day
+between train and test. **The shipped boundary is honoured as-is for the leaderboard path** —
+re-splitting would discard the organisers' own protocol for no gain.
+
+### Our internal split — N = 1, M = 1
+
+Carved out of `MINDsmall_train` only, for tuning without touching the official dev set:
+
+- **N = 1** — last 1 day (14 Nov) is internal test
+- **M = 1** — preceding 1 day (13 Nov) is internal validation
+- train = 9–12 Nov
+
+Justified by the observed range: the training file spans six days, so N=1/M=1 leaves four days
+of training data while mirroring the dataset's own one-day dev window. A larger N would both
+shrink training and diverge from the protocol the leaderboard actually uses.
+`compute_boundaries` derives these from the data's real maximum and raises if the range is too
+short, so a dataset that cannot support N+M days fails loudly rather than silently emptying a
+split.
+
+### EB-NeRD **[TBD]**
+Ships `train/` and `validation/` as separate directories. Ranges to be measured once
+`ebnerd_testset.zip` finishes downloading; the same honour-the-shipped-boundary rule applies.
 
 ## §4 Feature store layout **[TBD@P1]**
 

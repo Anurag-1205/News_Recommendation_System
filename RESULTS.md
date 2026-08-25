@@ -133,9 +133,91 @@ verified against an external implementation rather than assumed.
 test because dev coverage is 34.2% against test's 6.5%, and that AUC would land near chance. It came
 back 0.5036 — chance is 0.5000. Popularity contributes essentially nothing on this test split.
 
-## Q2 · BM25 lexical retrieval — recall@K
+## Q2 · BM25 lexical retrieval — 2026-08-22
 
-*Pending P3.*
+```bash
+PYTHONPATH=. .venv/bin/python scripts/eval_bm25_mind.py --limit 2000
+```
+
+Own BM25 (`src/lexical/`), k1=1.2, b=0.75, Lucene IDF variant, over `title + abstract`.
+Log: `data/processed/bm25_mind.log`; metrics: `data/processed/bm25_mind_metrics.json`.
+
+### Index
+
+| Quantity | Value |
+|---|---:|
+| Documents (train ∪ dev news) | 65,238 |
+| Unique terms | 60,909 |
+| Postings | 1,776,607 |
+| Mean document length (tokens) | 32.83 |
+| Build time | 2.9 s |
+
+### recall@K over the full 65,238-article corpus — the `n_recent` ablation
+
+Query = concatenated title+abstract of the user's *n* most recent clicks. 2,000 dev
+impressions; 1,941 scored, 59 skipped as cold-start (no history, so no query — skipped rather
+than counted as misses, which would conflate "retriever failed" with "nothing to retrieve from").
+
+| `n_recent` | recall@50 | recall@100 | recall@200 | wall time |
+|---:|---:|---:|---:|---:|
+| 1 | **0.0057** | 0.0074 | 0.0108 | 89 s |
+| 5 | 0.0047 | **0.0108** | **0.0179** | 341 s |
+| 20 | 0.0037 | 0.0095 | **0.0179** | 651 s |
+
+**The ablation shows a genuine crossover, not a single winner.** At K=50 the *shortest* query
+wins: one article's text is sharply on-topic, so what little it retrieves is right. At K=100
+and K=200 the 5-article query wins: a broader query covers more of the user's interests and
+surfaces the click further down the list. Going to 20 articles helps nothing and costs 7× the
+time — the query has drifted into a generic profile of the user rather than a description of
+what they are about to read.
+
+**Absolute recall is low, and that is the honest headline.** Finding the one clicked article in
+a 65,238-article corpus succeeds 0.5–1.8% of the time. Random selection at K=50 would be
+50/65,238 = 0.077%, so BM25 is ~7× better than chance — real signal, but weak. Content
+similarity between what a user read and what they click next is a much weaker relation than
+lexical retrieval assumes: news clicks are driven substantially by recency and prominence,
+neither of which a bag of words can see.
+
+### In-impression re-ranking (mode b) — all 73,152 dev impressions, `n_recent`=5
+
+| Metric | Popularity | **BM25** | Δ |
+|---|---:|---:|---:|
+| AUC | 0.5318 | **0.5451** | +0.0133 |
+| MRR | 0.2382 | **0.2538** | +0.0156 |
+| nDCG@5 | 0.2460 | **0.2676** | +0.0216 |
+| nDCG@10 | 0.3098 | **0.3289** | +0.0191 |
+
+BM25 improves all four metrics. No bootstrap CI yet, so this is not yet a claim that it
+"beats" popularity — that wording waits for the P2 harness.
+
+There is reason to expect the leaderboard gap to be **wider** than the offline gap, which is
+the opposite of the usual caution. Popularity lost 0.028 AUC from dev to test because its
+coverage collapsed from 34.2% to 6.5%. BM25 scores text, and every test article has a title, so
+its coverage is 100% on both splits — it has no equivalent cliff to fall off.
+
+### Scale instrumentation (Q6 evidence)
+
+| Operation | Cost |
+|---|---:|
+| Index build, 65,238 docs | 2.9 s |
+| Corpus search, `n_recent`=1 (24 query terms) | 48 ms/query |
+| Corpus search, `n_recent`=5 (110 terms) | 172 ms/query |
+| Corpus search, `n_recent`=20 (280 terms) | 299 ms/query |
+| In-impression re-rank | 17 ms/impression |
+| Peak RSS | ~350 MB |
+
+**Query cost grows with query length, roughly 1.4 ms per unique query term** — each term means
+one postings traversal. This is the measured argument against long history queries: `n_recent`=20
+costs 6× `n_recent`=1 and retrieves *worse* at K=50.
+
+**Where this breaks at 10×, measured rather than projected.** In-impression re-ranking at
+17 ms/impression extrapolates to **~11 hours** for the 2.37M-impression MIND test set, and
+EB-NeRD's test set is 13.5M impressions — 5.7× larger again. A first implementation used a
+linear scan over postings to find a document's term frequency; replacing it with a binary
+search over the sorted postings list (`_tf_of`) was the difference between scaling with corpus
+size and scaling with candidate count. The remaining cost is Python-level iteration, and the
+next step is a forward index so scoring iterates a document's ~33 terms rather than the query's
+110.
 
 ## Q3 · Semantic retrieval — recall@K
 

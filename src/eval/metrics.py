@@ -108,3 +108,20 @@ def evaluate_impressions(rows) -> dict[str, float]:
         "n_impressions": len(mrrs),
         "n_auc_defined": len(aucs),
     }
+
+
+def per_impression_metrics(rows) -> dict[str, list[float]]:
+    """Same metrics as `evaluate_impressions`, but kept per impression.
+
+    The bootstrap resamples impressions, so it needs the individual values rather than the
+    mean. AUC keeps its NaNs here instead of being filtered: dropping them at this level
+    would misalign the metric lists against each other, and `bootstrap_ci` removes them per
+    metric anyway.
+    """
+    out: dict[str, list[float]] = {"auc": [], "mrr": [], "ndcg@5": [], "ndcg@10": []}
+    for labels, scores in rows:
+        out["auc"].append(auc(labels, scores))
+        out["mrr"].append(mrr(labels, scores))
+        out["ndcg@5"].append(ndcg(labels, scores, 5))
+        out["ndcg@10"].append(ndcg(labels, scores, 10))
+    return out
