@@ -1,40 +1,55 @@
-# --- required by A1 Q8 / CLAUDE.md §3 ---
+# ============================================================================
+# Mandated by A1 Q8 — no large files in version control.
+# ============================================================================
 *.zip
 *.pt
 *.ckpt
 __pycache__/
 data/
 
-# --- environment ---
+# ============================================================================
+# Environment and tooling caches.
+# ============================================================================
 .venv/
 venv/
 *.pyc
 .python-version
-
-# --- caches ---
 .pytest_cache/
 .ipynb_checkpoints/
 .DS_Store
+.vscode/
+.idea/
 
-# --- large artifacts, even outside data/ ---
+# ============================================================================
+# Large artifacts, guarded even outside data/.
+# ============================================================================
 *.parquet
 *.npy
 *.faiss
 *.bin
 *.tar.gz
 
-# --- editors ---
-.vscode/
-.idea/
+# Exception: toy fixtures are small and are the oracles for the retrievers.
+!tests/fixtures/**
 
-# --- local working docs and third-party material, not A1 deliverables ---
+# ============================================================================
+# Submitted through other channels, deliberately not in the repository.
+# ============================================================================
+# AI-usage prompts — submitted separately, not via GitHub
+prompts/
+# AI usage log — required by A1 Q7.4 but delivered with the report, not via GitHub
+AI_USAGE.md
+# Assembled Moodle bundle, regenerated on demand by scripts/make_deliverables.sh
+report/deliverables/
+# Leaderboard screenshots — submitted with the report
+report/*.png
+report/*.jpg
+
+# ============================================================================
+# Local working documents, not assignment deliverables.
+# ============================================================================
 CLAUDE.md
 PLAN.md
+LEARNING_NOTES.md
 ebnerd_analysis.ipynb
 mind_analysis.ipynb
-
-# --- prompts/ is a graded deliverable but is pushed once, at the final submission ---
-prompts/
-
-# --- exception: toy fixtures oracle the retrievers (CLAUDE.md rule 2) and must be committed ---
-!tests/fixtures/**

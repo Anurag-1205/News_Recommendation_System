@@ -1,7 +1,11 @@
-# SPEC.md — A1 Component-1
+# Specification — A1 Component-1
 
-What each component is, and **how it will be verified**. Graded artifact — keep it current, and
-prefer an honest `TBD` to a plausible guess.
+**CS4.406 Information Retrieval and Extraction — Assignment 1, Component 1**
+
+This document defines each component of the pipeline, the interfaces between them, and the
+means by which each is verified. Decisions are recorded here at the point they are taken,
+together with the evidence supporting them. Open items are marked explicitly rather than
+resolved by assumption.
 
 Phase labels (P0–P6) refer to the build order: P0 setup · P1 data pipeline · P2 eval harness ·
 P3 lexical/BM25 · P4 semantic/ANN · P5 scale + Codabench · P6 design note. The eval harness is
@@ -26,10 +30,10 @@ a day we do not have.
 
 Beyond-accuracy metrics (Q4.2: diversity, novelty, coverage) attach to mode (b)'s top-k output.
 
-## §2 Unified schema **[TBD@P1]**
+## §2 Unified schema **[P1, implemented]**
 
 Two very different sources normalize to one shape, so everything downstream is dataset-agnostic.
-Target (field names to be finalised against the real files):
+Implemented by `src/pipeline/mind.py` and `src/pipeline/ebnerd.py`:
 
 ```
 articles(article_id, title, abstract, body, category, entities, published_ts)
@@ -86,13 +90,35 @@ shrink training and diverge from the protocol the leaderboard actually uses.
 short, so a dataset that cannot support N+M days fails loudly rather than silently emptying a
 split.
 
-### EB-NeRD **[TBD]**
-Ships `train/` and `validation/` as separate directories. Ranges to be measured once
-`ebnerd_testset.zip` finishes downloading; the same honour-the-shipped-boundary rule applies.
+### EB-NeRD — measured 2026-08-22
 
-## §4 Feature store layout **[TBD@P1]**
+| Split | Range | Rows |
+|---|---|---:|
+| `ebnerd_small/train` | 2023-05-18 07:00:01 → 2023-05-25 06:59:58 | 232,887 |
+| `ebnerd_small/validation` | mirrors train's structure, later window | 244,647 |
+| `ebnerd_testset/test` | unlabelled | 13,536,710 |
 
-Parquet on disk, keyed lookups, small and reusable — not a database.
+Internal split of the training file, same N=1 / M=1 rule: train 18–23 May (192,884),
+val 24 May (32,225), test 25 May to 07:00 (7,778). The final day is a partial one, which is
+why its row count is small — recorded rather than silently rounded away.
+
+## §4 Feature store layout **[P1, built 2026-08-22]**
+
+Parquet on disk, keyed lookups, small and reusable — not a database. Built by
+`scripts/build_pipeline.py` (`make data`), rooted at `data/processed/feature_store/`:
+
+```
+feature_store/
+  manifest.json                    seeds, split boundaries, cutoffs, row counts, build time
+  mind/article_popularity.parquet  article_id, click_count, cutoff
+  mind/user_activity.parquet       user_id, n_impressions, n_clicks, last_seen, history_len, cutoff
+  ebnerd/article_popularity.parquet
+```
+
+Every frame carries the `cutoff` it was built as-of. That column is what makes the Q9
+invariant checkable after the fact rather than trusted: the build asserts
+`max_source_timestamp < cutoff` before writing, and `tests/test_no_leakage.py` re-derives the
+same assertion from the stored value.
 
 ## §5 Verification strategy **[P0, seeded]**
 
@@ -101,14 +127,14 @@ Every component gets its oracle *before* its implementation. No oracle → build
 
 | Component | Oracle | Where |
 |---|---|---|
-| Temporal split | no history event ts ≥ its impression ts, asserted row-wise | `tests/test_no_leakage.py` |
-| BM25 scorer | 5-doc toy corpus, scores computed **by hand** | `tests/test_bm25.py` [TBD@P3] |
-| BM25 ranking | agreement with `rank_bm25` on the same corpus | same |
-| nDCG | L1 slide-17 worked example: labels 2,0,1,0,2 → nDCG@5 ≈ 0.86 | `tests/test_metrics.py` [TBD@P2] |
-| AUC | `sklearn.metrics.roc_auc_score` on the same vectors | same |
-| MRR | one-line reference implementation | same |
-| Harness sanity | random scorer → AUC ≈ 0.5, CI contains 0.5 | `make eval` [TBD@P2] |
-| Submission file | line count == impression count; every id present; ranks a permutation | `tests/test_submission_format.py` [TBD@P5] |
+| Temporal split | leaked fixture caught; shuffled split rejected; as-of cutoff enforced | `tests/test_no_leakage.py` ✅ |
+| BM25 scorer | 5-doc toy corpus, scores computed **by hand** | `tests/test_bm25.py` ✅ |
+| BM25 ranking | **exact score** agreement with `rank_bm25` (Okapi variant) | same ✅ |
+| nDCG | worked example: labels 2,0,1,0,2 → nDCG@5 = 0.8642 | `tests/test_metrics.py` ✅ |
+| AUC | `sklearn.metrics.roc_auc_score`, incl. heavy ties | same ✅ |
+| MRR | hand-computed; MIND's all-relevant definition vs textbook first-relevant | same ✅ |
+| Harness sanity | random scorer → AUC ≈ 0.5 over 3,000 impressions | `tests/test_metrics.py` ✅ |
+| Submission file | line count == impressions; ranks a permutation; no duplicates | `tests/test_submission_format.py` ✅ |
 
 ## §6 Codabench submission formats **[P0 — from TA notebooks, CONFIRM against pages]**
 
@@ -154,11 +180,11 @@ over the first. This splits P5 from one big submission day into two checkpoints:
 Submission 1 exists to prove the format and the plumbing while there is still time to fix a
 rejection. Do not defer both to 25 Aug.
 
-## §7 Environment & pinned dependencies **[P0 — versions TBD, see note]**
+## §7 Environment & pinned dependencies **[P0, resolved]**
 
-Python 3.12.3, venv at `.venv/`. Versions are filled from `pip freeze` **after** install —
-pinning to versions not yet resolved would be a guess. Install is currently blocked on the
-network (§10).
+Python 3.12.3, venv at `.venv/`. Resolved versions, from `pip freeze` after install:
+polars 1.43.2 · pyarrow 25.0.1 · numpy 2.5.2 · scikit-learn 1.9.0 · faiss-cpu 1.15.0 ·
+rank-bm25 0.2.2 · pytest 9.1.1 · matplotlib 3.11.1 · huggingface_hub 1.28.0.
 
 `requirements.txt` — the P0.5 list:
 
@@ -235,7 +261,9 @@ train/validation and are **absent from test**, because they describe the *next* 
 future information by construction. They are the "features unavailable at serving time" that Q9
 asks us to report with and without. `is_beyond_accuracy` is likewise test-only.
 
-MIND has no equivalent pair; its ablation is history-length truncation instead. **[TBD@P4]**
+MIND has no equivalent pair — every column it ships is available at request time. The EB-NeRD
+ablation is therefore the one reported (RESULTS.md Q9), and it is decisive: adding
+`next_read_time` moves AUC from 0.5029 to 0.9629, an inflation of +0.46.
 
 ## §10 Open decisions
 
@@ -243,12 +271,20 @@ Carried from the pre-Phase-1 decision list, plus what P0 surfaced.
 
 | # | Decision | Status |
 |---|---|---|
-| 1 | N, M per dataset | **[TBD@P1]** — needs real timestamps |
-| 2 | Cold-start threshold; head/tail percentile | **[TBD@P2]** |
+| 1 | N, M per dataset | **settled: N=1, M=1** for both, justified by the measured ranges in §3 |
+| 2 | Cold-start threshold; head/tail percentile | **settled**: cold-start ≤5 history clicks; head = top popularity quintile |
 | 3 | Own BM25 vs `rank_bm25` | **settled: own**, library as oracle |
-| 4 | MIND embedding model | **[TBD@P4]** — MIND's TransE entity vectors may remove the need for torch |
-| 5 | Submission formats verbatim | §6 — from notebooks, **pages not yet read** |
-| 6 | C2 boundary (click-log modelling) | **[TBD@P6]** — do not block 10 Sep |
+| 4 | MIND embedding model | **settled: TF-IDF + truncated SVD (128d)**. No torch. See RESULTS.md Q3 for why, and for the explained-variance caveat |
+| 5 | Submission formats verbatim | §6 — **confirmed by acceptance**: MIND scored a submission in this exact format |
+| 6 | C2 boundary (click-log modelling) | **settled** — see below |
+
+**C2 boundary.** Nothing built here forecloses Component 2. The scorer interface
+`score(user, candidates) -> list[float]` is model-agnostic, so a learned click model drops in
+beside BM25 and LSA as one more entry in the fusion, using the same harness, the same
+submission writer and the same leakage guarantees. The feature store already carries as-of
+user activity keyed by cutoff, which is the shape a click-log model needs. What is deliberately
+*not* built: any per-user learned parameters, any interaction matrix factorisation, and any
+sequence model over click history.
 | 7 | **Where the large-scale run executes** | **open — see §11** |
 
 ## §11 The binding constraint: this laptop **[P0, measured 20 Aug 2026]**

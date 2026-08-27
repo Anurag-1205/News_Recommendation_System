@@ -47,19 +47,27 @@ def article_text(articles_path: Path | str, limit: int | None = None) -> dict[in
     return dict(zip(df["article_id"].to_list(), zip(df["title"].to_list(), df["subtitle"].to_list())))
 
 
-def recent_history(history_path: Path | str, n_recent: int = 5) -> dict[int, list[int]]:
+def recent_history(history_path: Path | str, n_recent: int = 5,
+                   users: set | None = None) -> dict[int, list[int]]:
     """user_id -> their last `n_recent` clicked article ids, oldest first.
 
     Truncated at read time rather than after loading. The test history file is 1.16 GB and
     averages 144 articles per user across 807,677 users; materialising all of it would be
     ~116M ids in Python objects, which this machine cannot hold (SPEC.md §11). Keeping only
     the tail we actually query drops that to ~4M.
+
+    `users` restricts the result to a known set of user ids, and the filter is pushed into the
+    lazy scan so the rows are never materialised. When only part of the test set is being
+    scored -- resuming an interrupted pass, say -- this is the difference between holding
+    807,677 users and holding the few hundred thousand actually needed. Loading the full
+    dictionary was what repeatedly exhausted memory during a resume.
     """
-    df = (
-        pl.scan_parquet(history_path)
-        .select("user_id", pl.col("article_id_fixed").list.tail(n_recent).alias("recent"))
-        .collect()
+    lf = pl.scan_parquet(history_path).select(
+        "user_id", pl.col("article_id_fixed").list.tail(n_recent).alias("recent")
     )
+    if users is not None:
+        lf = lf.filter(pl.col("user_id").is_in(list(users)))
+    df = lf.collect()
     return dict(zip(df["user_id"].to_list(), df["recent"].to_list()))
 
 

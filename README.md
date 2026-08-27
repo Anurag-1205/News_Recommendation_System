@@ -1,10 +1,18 @@
-# News Recommendation System — IRE A1, Component 1
+# Lexical and Semantic Retrieval on MIND and EB-NeRD
 
-Lexical & semantic retrieval on **EB-NeRD** (Danish, RecSys 2024 Challenge) and **MIND**
-(English, Microsoft). Ranks the candidate articles in an impression by click likelihood from
-click history, session context, and article content.
+**CS4.406 Information Retrieval and Extraction — Assignment 1, Component 1**
+Individual submission · Due 27 August 2026
 
-CS4.406 Information Retrieval & Extraction · Individual · Due 27 Aug 2026
+A reproducible pipeline that ranks the candidate articles of an impression by click
+likelihood, using click history, session context and article content, on **EB-NeRD** (Danish,
+RecSys 2024 Challenge) and **MIND** (English, Microsoft). Covers lexical (BM25) and semantic
+(embedding) candidate generation, an offline evaluation harness with bootstrap confidence
+intervals, and submissions to both Codabench leaderboards.
+
+The design note required by Q6 is `report/design_note.md`. Component specifications and the
+verification strategy are in `SPEC.md`; every measured figure with its originating command is
+in `RESULTS.md`. The AI usage log required by Q7.4 is submitted with the report rather than
+through this repository.
 
 ## Reproduce
 
@@ -31,28 +39,62 @@ make fetch-large   # EB-NeRD large + testset + embeddings
 |---|---|
 | `SPEC.md` | interfaces, decisions, and **how each piece is verified** |
 | `RESULTS.md` | every measured number, with the command that produced it |
-| `AI_USAGE.md` | tools, prompts, what worked and what failed |
 | `src/pipeline/` | readers, unified schema, temporal split, feature store |
 | `src/lexical/` | inverted index + BM25 |
 | `src/semantic/` | embeddings + ANN index |
 | `src/eval/` | metrics, slices, bootstrap CIs |
 | `tests/` | oracles, incl. `test_no_leakage.py` |
+| `src/features/` | point-in-time popularity / CTR, strictly-before-t |
+| `src/baselines/` | popularity, score fusion (RRF, weighted sum) |
+| `report/design_note.md` | Q6 design note |
 | `scripts/fetch_data.sh` | raw downloads (resumable) |
 
 ## Status
 
 | Deliverable | State |
 |---|---|
-| Ranking metrics + submission format | done, 65 oracle tests |
-| MIND submission 1 (popularity) | **submitted** — Codabench 13967, AUC 0.5036 |
-| EB-NeRD submission | pending `ebnerd_testset.zip` |
-| BM25 / semantic retrieval | not started |
-| Data pipeline, temporal split | not started — `make data` exits non-zero |
+| **Q1** reproducible pipeline, temporal split | done — `make data`, disjointness asserted at build |
+| **Q2** BM25 lexical retrieval, recall@K | done — own index + scorer, `n_recent` ablation, both datasets (MIND `n_recent`=5 wins, EB-NeRD `n_recent`=20 wins — opposite, measured not assumed) |
+| **Q3** semantic retrieval, ANN, lexical-vs-semantic by slice | done on MIND (LSA + FAISS, pooling ablation, by-slice comparison) — **EB-NeRD semantic recall@K still open** |
+| **Q4** eval harness, beyond-accuracy, slices, bootstrap CIs | done |
+| **Q5** both Codabench leaderboards | MIND 0.5036 → 0.5258 → 0.5554 → **0.5714** (four, monotonic); EB-NeRD **0.5110**, second submission pending |
+| **Q6** design note | `report/design_note.md` |
+| **Q9** leakage test + serving-time ablations | done — 26 tests; two ablations, see below |
 
-`make eval` / `make bench` are stubs until their phase lands, and `tests/test_no_leakage.py` is
-intentionally red until the feature store exists.
+212 tests. `make bench` remains a stub; its numbers are collected inline and live in `RESULTS.md`.
 
-## What submission 1 taught us
+**Two Q9 ablations**, because they probe different failures:
+1. *Serving-unavailable columns* — adding EB-NeRD's `next_read_time` moves AUC 0.5029 → 0.9629
+   (**+0.46**). A chance-level model looks near-perfect via a column that cannot exist at
+   request time.
+2. *Frozen vs point-in-time popularity* — on MIND, rolling 0.6447 vs frozen 0.6058, disjoint.
+   The frozen variant leaks yet scores **worse**: staleness costs more than the leak gains.
+   On EB-NeRD the same comparison shows **no difference** — because there, recency dominates and
+   popularity barely contributes. The mechanism is in `RESULTS.md` Q9c.
+
+**Train/serve skew, and the validation rebuilt to detect it.** Submission 3's offline-to-
+leaderboard offset was 0.090 against 0.03 for its predecessors. Measured cause: `pop_24h`,
+`pop_1h` and `ctr_24h` are zero for **100%** of test candidates, because training events end
+14 Nov and the test split runs 16–22 Nov — while on dev, adjacent to training, two of the three
+carried signal 42% of the time. Not leakage; the validation split simply sat in a temporal
+position the test set never occupies. The fix was a gap-aware protocol (`scripts/gap_aware_mind.py`)
+that evaluates the same distance past the last counted event as the test split does.
+
+## Reproduce in order
+
+```bash
+make env && make fetch-small && make fetch-mind   # MIND needs `hf auth login` first
+make data      # raw -> unified schema -> temporal split -> feature store
+make test      # 212 tests, incl. the no-leakage assertions
+PYTHONPATH=. .venv/bin/python scripts/eval_bm25_mind.py       # Q2
+PYTHONPATH=. .venv/bin/python scripts/eval_semantic_mind.py   # Q3 + Q3.5 + Q4.2
+PYTHONPATH=. .venv/bin/python scripts/ablation_serving_time.py # Q9  (serving-unavailable)
+PYTHONPATH=. .venv/bin/python scripts/rerank_mind.py           # Q9b (frozen vs rolling)
+PYTHONPATH=. .venv/bin/python scripts/encode_mind_minilm.py    # one-off sentence-transformer cache
+PYTHONPATH=. .venv/bin/python scripts/gap_aware_mind.py        # gap-aware model selection
+```
+
+## What the baseline taught us
 
 The popularity baseline scored **AUC 0.5036** on the MIND leaderboard. Chance is 0.5000. The
 model contributes almost nothing — and understanding *why* is what determines the next model.

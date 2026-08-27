@@ -25,8 +25,8 @@ fetch-large:  ## EB-NeRD large/test/embeddings (~5.1 GB) — needed by P5
 fetch-mind: env  ## MIND via HuggingFace — requires `hf auth login` first
 	./scripts/fetch_data.sh mind
 
-data:  ## rebuild raw -> feature store (Q1: one command, from raw)
-	@echo "make data: not implemented (P1)"; exit 1
+data: env  ## rebuild raw -> unified schema -> temporal split -> feature store (Q1)
+	PYTHONPATH=. $(PY) scripts/build_pipeline.py
 
 test: env  ## run the test suite, incl. the no-leakage assertion (Q9)
 	PYTHONPATH=. $(VENV)/bin/pytest tests/ -v
