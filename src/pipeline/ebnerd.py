@@ -53,7 +53,7 @@ def recent_history(history_path: Path | str, n_recent: int = 5,
 
     Truncated at read time rather than after loading. The test history file is 1.16 GB and
     averages 144 articles per user across 807,677 users; materialising all of it would be
-    ~116M ids in Python objects, which this machine cannot hold (SPEC.md §11). Keeping only
+    ~116M ids in Python objects, which this machine cannot hold. Keeping only
     the tail we actually query drops that to ~4M.
 
     `users` restricts the result to a known set of user ids, and the filter is pushed into the

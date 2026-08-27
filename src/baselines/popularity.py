@@ -1,6 +1,6 @@
 """Popularity baseline: rank candidates by how often they were clicked in training.
 
-This is submission #1 (SPEC.md §6.3). It is deliberately the simplest thing that is not
+This is submission #1. It is deliberately the simplest thing that is not
 random: it uses no user history, no article text, and no personalisation, so it sets the
 floor that BM25 and the semantic retriever must clear in submission #2. A baseline that
 already encodes half the eventual model cannot do that job.
@@ -41,7 +41,7 @@ def score_map(counts: pl.DataFrame) -> dict[str, int]:
 
     ~50K entries, so a dict is both small and the fastest per-candidate lookup available.
     A join would be tidier but forces the 2.37M-row test frame through an explode, which
-    is precisely what this machine's ~2 GB of free RAM cannot afford (SPEC.md §11).
+    is precisely what this machine's ~2 GB of free RAM cannot afford.
     """
     return dict(zip(counts["news_id"].to_list(), counts["click_count"].to_list()))
 

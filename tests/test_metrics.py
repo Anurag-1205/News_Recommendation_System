@@ -3,7 +3,7 @@
 Two independent kinds of check:
   1. Hand-computed values, worked out on paper, for nDCG / MRR / AUC.
   2. Agreement with sklearn.metrics.roc_auc_score, which is the oracle for AUC only —
-     never the implementation (SPEC.md §7).
+     never the implementation (SPEC.md §5).
 """
 
 import math

@@ -47,7 +47,7 @@ class TestRanksFromScores:
 
 class TestLineFormat:
     def test_matches_the_documented_example(self):
-        """SPEC.md §6.2 quotes this exact line from the EB-NeRD reference notebook."""
+        """SPEC.md §6 quotes this exact line from the EB-NeRD reference notebook."""
         assert format_line(6451339, [8, 1, 6, 7, 4, 2, 9, 5, 3]) == "6451339 [8,1,6,7,4,2,9,5,3]"
 
     def test_no_spaces_inside_brackets(self):

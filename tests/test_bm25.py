@@ -7,7 +7,7 @@ Two independent checks, because either alone is weak:
 2. **Exact agreement with `rank_bm25`** in the `okapi` variant. Catches a formula that is
    right in isolation but mis-wired to the index.
 
-`rank_bm25` is the oracle here and never the implementation (SPEC.md §7).
+`rank_bm25` is the oracle here and never the implementation (SPEC.md §5).
 """
 
 import math

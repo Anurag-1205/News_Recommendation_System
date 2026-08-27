@@ -107,7 +107,7 @@ On the test split it has almost never seen one:
 | `MINDsmall_dev` | 34.2% | — |
 | `MINDlarge_test` | **6.5%** | **28.6%** |
 
-MIND trains on 11 Nov 2019 and tests on 19–22 Nov 2019, against a news set of 120,961 articles
+MIND trains on 9–14 Nov 2019 and tests on 16–22 Nov 2019, against a news set of 120,961 articles
 versus small-train's 51,282. News turns over in days, so 93.5% of the articles we are asked to
 rank are ones we have no click evidence for at all. For 28.6% of impressions *every* candidate is
 unknown, all scores tie at zero, and the output degenerates to the candidate list's own order.
@@ -125,9 +125,12 @@ Roughly a third of the submission is therefore not a prediction.
    history is the only per-user signal in the dataset and it is untouched.
 3. **Never let a third of the output be a tie.** Any signal that separates candidates — category
    match against history, title overlap, article recency — beats arbitrary ordering on the 28.6%.
-4. **Trust the offline harness, with a known offset.** All four offline metrics were optimistic by
-   0.013–0.028 and none inverted, so offline comparisons predict the direction of a leaderboard
-   move. Model selection can happen locally without spending submissions to learn things.
+4. **Trust the offline harness for *direction*, not for size.** All four offline metrics were
+   optimistic by 0.013–0.028 here and none inverted. That consistency was later over-read as a
+   calibration constant: submission 3's offset was 0.090, and EB-NeRD's ran the other way
+   entirely (0.5110 against an offline 0.5030). Offline comparisons predict which way a change
+   moves; they overstate how far, by an amount that grows with the test window's distance from
+   training.
 5. **Fit on the largest training split available.** Coverage is partly a sample-size problem;
    `MINDlarge_train` sees far more of the article space than `MINDsmall_train`'s 51,282.
 

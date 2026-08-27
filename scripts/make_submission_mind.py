@@ -11,7 +11,8 @@ Three stages, in this order on purpose:
      deliberately in submission #2.
   3. Score MINDlarge_test in batches, validate the file offline, and zip it.
 
-Memory: the test split is 2.37M impressions and this machine has ~2 GB free (SPEC.md §11),
+Memory: the test split is 2.37M impressions and this machine has ~2 GB free (see the
+environment baseline in RESULTS.md),
 so the test pass streams in slices and appends to the output file rather than building the
 predictions in memory. The reference notebooks read the whole frame; that is the one place
 we deliberately diverge.

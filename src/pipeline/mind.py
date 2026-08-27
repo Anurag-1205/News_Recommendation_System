@@ -55,7 +55,7 @@ def scan_behaviors(path: Path | str) -> pl.LazyFrame:
     """Lazily scan behaviors.tsv. Nothing is read until the caller collects.
 
     Lazy by default because MINDlarge_test is 2.37M rows and this machine has ~2 GB free
-    (SPEC.md §11). The reference notebooks call `read_csv` here; that is the one place we
+    with ~2 GB free. The reference notebooks call `read_csv` here; that is the one place we
     deliberately diverge from them.
     """
     return pl.scan_csv(

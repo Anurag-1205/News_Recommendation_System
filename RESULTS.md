@@ -31,7 +31,7 @@ Machine facts that bound every later measurement.
 
 Three independent endpoints agree, so the constraint is the link rather than any one server.
 Implication for the scale analysis (Q6): at 13 KB/s the 2.97 GB `ebnerd_large.zip` needs ~63 h
-of uninterrupted transfer. See `SPEC.md` §11.
+of uninterrupted transfer.
 
 ## Dataset bundle sizes — 2026-08-20
 
@@ -90,8 +90,8 @@ Popularity can only rank an article it has seen clicked in training. It has not 
 | `MINDsmall_dev` | 34.2% | — |
 | `MINDlarge_test` (300K sample) | **6.5%** | **28.6%** |
 
-Two distinct causes compound: MIND's train split is 11 Nov 2019 while the test split is
-19–22 Nov 2019, and the test news set is 120,961 articles against small-train's 51,282. News
+Two distinct causes compound: MIND's train split runs 9–14 Nov 2019 while the test split is
+16–22 Nov 2019, and the test news set is 120,961 articles against small-train's 51,282. News
 turns over fast, so most test candidates were never clicked in training.
 
 **Consequence, stated plainly: the dev numbers above overstate what the leaderboard will show.**
@@ -131,11 +131,17 @@ Returned by the competition's own scorer (`scoring_result.zip` → `scores.json`
 
 Two things this establishes, both of which are worth more than the score itself.
 
-**1. The harness is calibrated.** All four offline metrics were optimistic by a small, consistent
-margin (−0.013 to −0.028) and none inverted. So `src/eval/metrics.py` measures the same quantities
-the graders' scorer measures, and offline comparisons between models can be trusted to predict the
-direction of a leaderboard change. That is what the harness was built to guarantee, and it is now
-verified against an external implementation rather than assumed.
+**1. The harness measures what the graders' scorer measures.** All four offline metrics were
+optimistic by a small, consistent margin (−0.013 to −0.028) and none inverted, so
+`src/eval/metrics.py` computes the same quantities as the competition's implementation.
+
+> **Superseded — read with the correction.** On the strength of this and submission 2 it was
+> concluded here that the harness was "calibrated" and predicted both the *direction* and the
+> *size* of a leaderboard move. Submission 3 refuted the second half: its offset was −0.090.
+> Two points from one model family were never evidence about a different one. The full
+> correction is under *Submission 3*, and the reversal on EB-NeRD is under *EB-NeRD
+> submissions*. The claim is left in place rather than edited away, because the sequence of
+> belief and refutation is the finding.
 
 **2. The coverage prediction was right.** RESULTS.md said before submitting that dev would overstate
 test because dev coverage is 34.2% against test's 6.5%, and that AUC would land near chance. It came
@@ -353,16 +359,25 @@ The EB-NeRD scorer returns a per-day breakdown, which reveals the scored window;
 directly against the file:
 
 ```
-ebnerd_small train : 2023-05-18 07:00:01 .. 2023-05-25 06:59:58
-ebnerd test        : 2023-06-01 07:00:00 .. 2023-06-08 06:59:59
+ebnerd_small train      : 2023-05-18 07:00:01 .. 2023-05-25 06:59:58   232,887
+ebnerd_small validation : 2023-05-25 07:00:02 .. 2023-06-01 06:59:59   244,647
+ebnerd testset          : 2023-06-01 07:00:00 .. 2023-06-08 06:59:59  13,536,710
 ```
 
-**A gap of seven to fourteen days between the last training event and the test window** — where
-MIND's is two to eight. This was never checked while the EB-NeRD models were being built, and it
-should have been: it is the single fact that most strongly predicts how behavioural features will
-behave. It explains why frozen popularity measured at AUC 0.4429 on EB-NeRD, why article recency
-dominated the importance table, and why rolling-versus-frozen made no measurable difference there
-— with a two-week gap, no trailing window reaches live data at all.
+**Three contiguous seven-day windows.** Validation ends one second before test begins.
+
+**Our models fitted rolling counts on `train` alone**, which places them seven to fourteen days
+from the test window — against MIND's two to eight. That is what explains the EB-NeRD picture:
+frozen popularity at AUC 0.4429, article recency dominating the importance table, and
+rolling-versus-frozen showing no measurable difference, because at that distance no trailing
+window reaches live data at all.
+
+**But the gap was partly self-imposed, and that is the more useful finding.** `validation` is
+*immediately adjacent* to the test window and was never used for the counts. Fitting on
+`train ∪ validation` would have put the model beside the test window rather than a week from it,
+and would plausibly have revived the very features measured as dead. This was not a design
+decision — the window was never checked while the EB-NeRD models were being built. Recorded in
+`SPEC.md` §7 as a known limitation.
 
 Per-day AUC across the eight test days is stable: min 0.5005, max 0.5213, spread 0.0207. So the
 result is not carried by any single day.
@@ -379,6 +394,27 @@ Offline validation on `ebnerd_small` (120,000 impressions, impression-level 70/3
 Given submission 1 came back 0.008 *above* its offline figure, the leaderboard result for this
 one is not forecast here — a single reversed offset is no more a calibration constant than the
 two consistent ones were.
+
+## Q1 · Reproducible pipeline — 2026-08-22
+
+```bash
+make data      # PYTHONPATH=. .venv/bin/python scripts/build_pipeline.py
+```
+
+Raw archives → unified schema → temporal split → feature store, idempotent, ~1 s from
+already-extracted archives. Manifest with seeds and boundaries:
+`data/processed/feature_store/manifest.json`.
+
+Splits, derived from each dataset's real timestamp range (N=1 test day, M=1 validation day):
+
+| Dataset | train | val | test |
+|---|---|---|---|
+| MIND (`MINDsmall_train`) | 95,071 rows, 09–12 Nov 2019 | 31,624 rows, 13 Nov | 30,270 rows, 14 Nov |
+| EB-NeRD (`ebnerd_small` train) | 192,884 rows, 18–23 May 2023 | 32,225 rows, 24 May | 7,778 rows, 25 May (to 07:00) |
+
+`assert_disjoint` runs inside the build, not only in tests: train's maximum timestamp is
+strictly below val's minimum, and val's below test's, on every rebuild. A silently overlapping
+split would invalidate every number in this file, so it is checked where it is created.
 
 ## Q2 · BM25 lexical retrieval — 2026-08-22
 
@@ -808,25 +844,3 @@ fresh articles, and *how* fresh is what separates them.
 
 This is the single largest gap between what we measured and what the data supported, and it
 came from not asking what other columns the dataset offered before concluding the task was hard.
-
-## Q1 · Reproducible pipeline — 2026-08-22
-
-```bash
-make data      # PYTHONPATH=. .venv/bin/python scripts/build_pipeline.py
-```
-
-Raw archives → unified schema → temporal split → feature store, idempotent, ~1 s from
-already-extracted archives. Manifest with seeds and boundaries:
-`data/processed/feature_store/manifest.json`.
-
-Splits, derived from each dataset's real timestamp range (N=1 test day, M=1 validation day):
-
-| Dataset | train | val | test |
-|---|---|---|---|
-| MIND (`MINDsmall_train`) | 95,071 rows, 09–12 Nov 2019 | 31,624 rows, 13 Nov | 30,270 rows, 14 Nov |
-| EB-NeRD (`ebnerd_small` train) | 192,884 rows, 18–23 May 2023 | 32,225 rows, 24 May | 7,778 rows, 25 May (to 07:00) |
-
-`assert_disjoint` runs inside the build, not only in tests: train's maximum timestamp is
-strictly below val's minimum, and val's below test's, on every rebuild. A silently overlapping
-split would invalidate every number in this file, so it is checked where it is created.
-

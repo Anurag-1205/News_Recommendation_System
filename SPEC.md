@@ -1,39 +1,37 @@
-# Specification — A1 Component-1
+# Specification
 
 **CS4.406 Information Retrieval and Extraction — Assignment 1, Component 1**
 
-This document defines each component of the pipeline, the interfaces between them, and the
-means by which each is verified. Decisions are recorded here at the point they are taken,
-together with the evidence supporting them. Open items are marked explicitly rather than
-resolved by assumption.
+Defines each component, the interfaces between them, and how each is verified. Decisions are
+recorded at the point they were taken, with the evidence that settled them.
 
-Phase labels (P0–P6) refer to the build order: P0 setup · P1 data pipeline · P2 eval harness ·
-P3 lexical/BM25 · P4 semantic/ANN · P5 scale + Codabench · P6 design note. The eval harness is
-built *before* the retrievers because it is their oracle.
-
-Status key: **[P0]** settled · **[TBD@Pn]** decided in that phase, from measured data.
+Measured results live in `RESULTS.md` and are not repeated here; this document states the
+contract, not the numbers.
 
 ---
 
-## §1 Scope & the two evaluation modes **[P0]**
+## 1 · Scope and the two evaluation modes
 
-One scorer, `score(user, article) -> float`, wrapped by two harnesses. Settling this before any
-retrieval code is written is the point — retrofitting mode (b) onto a corpus-only retriever costs
-a day we do not have.
+One scorer, `score(user, candidates) -> list[float]`, wrapped by two harnesses. Settling this
+before any retrieval code was written was deliberate: retrofitting mode (b) onto a corpus-only
+retriever costs a day.
 
 | | Mode (a) — candidate generation | Mode (b) — in-impression re-ranking |
 |---|---|---|
-| Scores against | the whole article corpus | only `article_ids_inview` for that impression |
-| Metrics | recall@K, K ∈ {50, 100, 200} | AUC · MRR · nDCG@5 · nDCG@10 |
-| Asked by | Q2.4, Q3.4 | Q4.1 |
-| Used for | ablations, lexical-vs-semantic comparison | **both Codabench leaderboards** |
+| Scores against | the whole article corpus | that impression's candidates only |
+| Metric | recall@K, K ∈ {50, 100, 200} | AUC · MRR · nDCG@5 · nDCG@10 |
+| Required by | Q2.4, Q3.4 | Q4.1, and both leaderboards |
 
-Beyond-accuracy metrics (Q4.2: diversity, novelty, coverage) attach to mode (b)'s top-k output.
+Beyond-accuracy metrics (Q4.2) attach to mode (b)'s top-k output.
 
-## §2 Unified schema **[P1, implemented]**
+**Verified:** `test_search_agrees_with_score_candidates` asserts both harnesses return identical
+scores for the same query, so they cannot drift apart.
 
-Two very different sources normalize to one shape, so everything downstream is dataset-agnostic.
-Implemented by `src/pipeline/mind.py` and `src/pipeline/ebnerd.py`:
+---
+
+## 2 · Unified schema
+
+Two dissimilar sources normalise to one shape so everything downstream is dataset-agnostic:
 
 ```
 articles(article_id, title, abstract, body, category, entities, published_ts)
@@ -41,267 +39,209 @@ impressions(impression_id, user_id, ts, candidates[], labels[])
 history(user_id, article_ids[], timestamps[])
 ```
 
-Source-specific facts that the two readers must reconcile (from the TA notebooks, §9 below):
+Implemented in `src/pipeline/mind.py` and `src/pipeline/ebnerd.py`. The differences the two
+readers reconcile:
 
 | | MIND | EB-NeRD |
 |---|---|---|
 | Format | TSV, no header | Parquet |
-| Language | English | **Danish** — no English stemmer/stoplist |
-| Body text | ❌ absent (URLs expired) | ✅ present |
-| History | inline in `behaviors.tsv` | separate `history.parquet` |
-| Candidates | `impressions` str, `N123-1 N456-0` | `article_ids_inview` list[int32] |
-| Labels | `-1` / `-0` suffix | `article_ids_clicked` list[int32] |
-| Entity embeddings | ✅ TransE 100-dim, shipped | ❌ (separate download) |
+| Language | English | **Danish** — no English stemmer or stoplist |
+| History | inline per impression | separate file, keyed by user |
+| Labels | `-1` / `-0` suffix per candidate | list of clicked ids |
+| Publish time | absent | present |
 
-## §3 Temporal split — N and M **[P1, measured 2026-08-22]**
+The label difference is the trap: a 0/1 mask against a set of ids. `labels_from_clicked`
+converts one to the other and is covered by `tests/test_ebnerd.py`, because getting it wrong
+yields a well-formed submission that scores like noise.
 
-Never random — interaction data is split by time or not at all. Enforced by
-`tests/test_no_leakage.py::TestTemporalSplit::test_random_split_would_be_rejected`, which
-shuffles a frame and asserts the detector rejects it.
+---
 
-### MIND — measured from the files, not from documentation
+## 3 · Temporal split
 
-| Split | Range | Days | Rows | Users |
-|---|---|---:|---:|---:|
-| `MINDsmall_train` | 2019-11-09 00:00:19 → 2019-11-14 23:59:13 | 6 | 156,965 | 50,000 |
-| `MINDsmall_dev` | 2019-11-15 00:00:01 → 2019-11-15 23:58:03 | **1** | 73,152 | 50,000 |
-| `MINDlarge_test` | 2019-11-16 00:00:05 → 2019-11-22 23:59:58 | 7 | 2,370,727 | 702,005 |
+Interaction data is split by time or not at all. Enforced by
+`test_random_split_would_be_rejected`, which shuffles a frame and asserts the detector rejects it.
 
-**Correction:** §9 previously recorded `MINDlarge_test` as 19–22 Nov, taken from the TA
-reference notebook. Measured from the file it is **16–22 Nov**. The notebook was wrong, which
-is why every fact of this kind is re-derived from the data before it is used.
+**Rule.** Last N days = test, preceding M days = validation, derived from each dataset's observed
+range rather than an assumed calendar. **N = 1, M = 1** for both, justified by the training files
+spanning six and seven days respectively.
 
-The three splits are already strictly temporal and disjoint, with dev occupying the single day
-between train and test. **The shipped boundary is honoured as-is for the leaderboard path** —
-re-splitting would discard the organisers' own protocol for no gain.
+**Shipped splits are honoured as published.** Both datasets already provide strictly temporal,
+disjoint train/validation/test splits; re-splitting them would discard the organisers' protocol.
+The N/M rule applies to the internal split carved from the training file for tuning.
 
-### Our internal split — N = 1, M = 1
+### Observed windows
 
-Carved out of `MINDsmall_train` only, for tuning without touching the official dev set:
+| Dataset | train | validation | test |
+|---|---|---|---|
+| MIND | 9–14 Nov 2019 | 15 Nov 2019 | 16–22 Nov 2019 |
+| EB-NeRD | 18–25 May 2023 | 25 May – 1 Jun 2023 | 1–8 Jun 2023 |
 
-- **N = 1** — last 1 day (14 Nov) is internal test
-- **M = 1** — preceding 1 day (13 Nov) is internal validation
-- train = 9–12 Nov
+**EB-NeRD's three windows are contiguous and seven days each**, validation ending one second
+before test begins. This has a consequence recorded in §7: models fitted on `train` alone sit
+seven to fourteen days from the test window, while `validation` is immediately adjacent to it.
 
-Justified by the observed range: the training file spans six days, so N=1/M=1 leaves four days
-of training data while mirroring the dataset's own one-day dev window. A larger N would both
-shrink training and diverge from the protocol the leaderboard actually uses.
-`compute_boundaries` derives these from the data's real maximum and raises if the range is too
-short, so a dataset that cannot support N+M days fails loudly rather than silently emptying a
-split.
+**A correction.** §9 of an earlier revision recorded `MINDlarge_test` as 19–22 Nov, taken from a
+reference notebook. Measured from the file it is 16–22 Nov. Facts of this kind are re-derived from
+the data before use.
 
-### EB-NeRD — measured 2026-08-22
+---
 
-| Split | Range | Rows |
-|---|---|---:|
-| `ebnerd_small/train` | 2023-05-18 07:00:01 → 2023-05-25 06:59:58 | 232,887 |
-| `ebnerd_small/validation` | mirrors train's structure, later window | 244,647 |
-| `ebnerd_testset/test` | unlabelled | 13,536,710 |
+## 4 · Feature store
 
-Internal split of the training file, same N=1 / M=1 rule: train 18–23 May (192,884),
-val 24 May (32,225), test 25 May to 07:00 (7,778). The final day is a partial one, which is
-why its row count is small — recorded rather than silently rounded away.
-
-## §4 Feature store layout **[P1, built 2026-08-22]**
-
-Parquet on disk, keyed lookups, small and reusable — not a database. Built by
-`scripts/build_pipeline.py` (`make data`), rooted at `data/processed/feature_store/`:
+Parquet on disk, keyed lookups, built by `make data` at `data/processed/feature_store/`:
 
 ```
-feature_store/
-  manifest.json                    seeds, split boundaries, cutoffs, row counts, build time
-  mind/article_popularity.parquet  article_id, click_count, cutoff
-  mind/user_activity.parquet       user_id, n_impressions, n_clicks, last_seen, history_len, cutoff
-  ebnerd/article_popularity.parquet
+manifest.json                    seeds, split boundaries, cutoffs, row counts
+mind/article_popularity.parquet  article_id, click_count, cutoff
+mind/user_activity.parquet       user_id, n_impressions, n_clicks, last_seen, history_len, cutoff
+ebnerd/article_popularity.parquet
 ```
 
-Every frame carries the `cutoff` it was built as-of. That column is what makes the Q9
-invariant checkable after the fact rather than trusted: the build asserts
-`max_source_timestamp < cutoff` before writing, and `tests/test_no_leakage.py` re-derives the
-same assertion from the stored value.
+Every frame carries the `cutoff` it was built as-of. That column makes the leakage invariant
+checkable after the fact rather than trusted: the build asserts `max_source_timestamp < cutoff`
+before writing, and `tests/test_no_leakage.py` re-derives the same assertion from the stored value.
 
-## §5 Verification strategy **[P0, seeded]**
+---
 
-Every component gets its oracle *before* its implementation. No oracle → build the oracle first;
-"looks right" is not a result.
+## 5 · Verification strategy
 
-| Component | Oracle | Where |
+Every component has an oracle written before its implementation.
+
+| Component | Oracle | Location |
 |---|---|---|
-| Temporal split | leaked fixture caught; shuffled split rejected; as-of cutoff enforced | `tests/test_no_leakage.py` ✅ |
-| BM25 scorer | 5-doc toy corpus, scores computed **by hand** | `tests/test_bm25.py` ✅ |
-| BM25 ranking | **exact score** agreement with `rank_bm25` (Okapi variant) | same ✅ |
-| nDCG | worked example: labels 2,0,1,0,2 → nDCG@5 = 0.8642 | `tests/test_metrics.py` ✅ |
-| AUC | `sklearn.metrics.roc_auc_score`, incl. heavy ties | same ✅ |
-| MRR | hand-computed; MIND's all-relevant definition vs textbook first-relevant | same ✅ |
-| Harness sanity | random scorer → AUC ≈ 0.5 over 3,000 impressions | `tests/test_metrics.py` ✅ |
-| Submission file | line count == impressions; ranks a permutation; no duplicates | `tests/test_submission_format.py` ✅ |
+| Temporal split | leaked fixture caught; shuffled split rejected; as-of cutoff enforced | `tests/test_no_leakage.py` |
+| Point-in-time counts | event at exactly *t* excluded; windows; unsorted input refused | `tests/test_rolling.py` |
+| BM25 scorer | 5-document corpus, scores computed by hand | `tests/test_bm25.py` |
+| BM25 ranking | **exact** score agreement with `rank_bm25` (Okapi variant) | `tests/test_bm25.py` |
+| Forward index | identical scores to the inverted path — an optimisation must change nothing | `tests/test_bm25.py` |
+| nDCG | worked example: relevances 2,0,1,0,2 → nDCG@5 = 0.8642 | `tests/test_metrics.py` |
+| AUC | `sklearn.metrics.roc_auc_score`, including heavy ties | `tests/test_metrics.py` |
+| MRR | hand-computed; MIND's all-relevant definition against the textbook first-relevant | `tests/test_metrics.py` |
+| Bootstrap CI | interval narrows with more data; covers a known mean; deterministic per seed | `tests/test_bootstrap.py` |
+| Harness sanity | random scorer → AUC ≈ 0.5 over 3,000 impressions | `tests/test_metrics.py` |
+| Submission file | line count; ranks a permutation of 1..N; duplicate policy | `tests/test_submission_format.py` |
+| Model selection | evaluated at the test split's temporal distance, not the dev split's | §8 |
 
-## §6 Codabench submission formats **[P0 — from TA notebooks, CONFIRM against pages]**
+212 tests. Library dependencies used **as oracles only** — `rank_bm25` and `scikit-learn`'s
+`roc_auc_score` — exist to disagree with our implementations, never to be them.
 
-Formats are copied verbatim from the competition page and never trusted to memory — a rejected
-upload late in the schedule costs a full re-run. These came from the TA-provided reference
-notebooks, which is second-hand — **better than memory, not yet confirmed.**
-Re-read both pages when the network allows and mark confirmed.
+---
 
-Both competitions use the **same line format**:
+## 6 · Codabench submission format
+
+A format is never trusted to memory; a rejected upload costs a full regeneration pass. Both
+competitions use the same line format:
 
 ```
 impression_id [rank_order]
 ```
 
-`rank_order` is a permutation of 1..N, N = number of candidates in that impression.
-**Rank 1 = most likely to be clicked.** Ranks are positional: the i-th rank belongs to the i-th
-candidate in the impression's candidate list, so candidate order must be preserved.
+`rank_order` is a permutation of 1..N over the impression's candidates, **in the candidate list's
+own order** — position *i* holds candidate *i*'s rank, not the identity of the *i*-th ranked
+candidate. Rank 1 is the most likely click. Transposing this produces a file that validates
+perfectly and scores like noise, so `ranks_from_scores` is the only sanctioned constructor and its
+orientation is pinned by test.
 
-### §6.1 MIND — Codabench 13967
-- Source: TA reference notebook (MIND), cell 22, citing MIND's official `evaluate.py`.
-  Competition page: **not yet read.**
-- Example line: `1 [5,4,9,16,11,2,1,15,7,12,13,3,6,14,8,10]`
-- Scoring: `1/rank` — lower rank = higher score
-- File: `prediction.txt` → zipped to `mind_prediction.zip`, .txt at the archive root
-- Covers: all 2,370,727 impressions of `MINDlarge_test` — **confirmed against the real file**
-- Enforced by `tests/test_submission_format.py` and `validate_file()`, run before every upload
-
-### §6.2 EB-NeRD — Codabench 2469
-- Source: TA reference notebook (EB-NeRD), cell 22. Competition page: **not yet read.**
-- Example line: `6451339 [8,1,6,7,4,2,9,5,3]`
-- File: `predictions.txt` → zipped to `predictions.zip`
-- Covers: all 13,536,710 impressions of `ebnerd_testset`
-
-### §6.3 Submission cadence **[P0 — course update, 20 Aug 2026]**
-Course staff require **at least 2 submissions per person**, the second demonstrating improvement
-over the first. This splits P5 from one big submission day into two checkpoints:
-
-| # | Model | Phase | Rationale |
-|---|---|---|---|
-| 1 | popularity or BM25 | end of P3 | banks the mandatory submission early, de-risks format |
-| 2 | semantic / fusion | P5 | the improvement, measured offline first |
-
-Submission 1 exists to prove the format and the plumbing while there is still time to fix a
-rejection. Do not defer both to 25 Aug.
-
-## §7 Environment & pinned dependencies **[P0, resolved]**
-
-Python 3.12.3, venv at `.venv/`. Resolved versions, from `pip freeze` after install:
-polars 1.43.2 · pyarrow 25.0.1 · numpy 2.5.2 · scikit-learn 1.9.0 · faiss-cpu 1.15.0 ·
-rank-bm25 0.2.2 · pytest 9.1.1 · matplotlib 3.11.1 · huggingface_hub 1.28.0.
-
-`requirements.txt` — the P0.5 list:
-
-| Package | Why |
-|---|---|
-| `polars` | lazy scans — memory is the binding constraint (§11), and the TA notebooks use it |
-| `pyarrow` | parquet feature store; row-group-at-a-time reads |
-| `numpy` | — |
-| `scikit-learn` | **ORACLE ONLY** — `roc_auc_score` cross-check |
-| `faiss-cpu` | P4 ANN index |
-| `rank-bm25` | **ORACLE ONLY** — cross-check against our own BM25 |
-| `pytest` | test runner |
-| `tqdm` | progress on multi-hour passes |
-| `matplotlib` | the notebooks import it |
-| `huggingface_hub[cli]` | gated MIND download |
-
-The two **ORACLE ONLY** entries are load-bearing: BM25 is hand-written (§10.3 — it is Module 2
-course material and exam-probed). `rank_bm25` exists solely to disagree with ours and expose bugs.
-Anyone reading this manifest later must not mistake it for the implementation.
-
-`requirements-embed.txt` — deferred to P4, ~2.5 GB, not installed yet:
-`torch`, `transformers`, `sentence-transformers`.
-
-**Dask:** offered by the TAs as an option. Not adopted — both TA notebooks use Polars lazy scans,
-and matching them keeps our code cross-referenceable against the reference material. Revisit only
-if a specific step proves Polars cannot stream it.
-
-## §8 Repo shape — deviations from the standard layout **[P0]**
-
-The agreed layout is `src/{pipeline,lexical,semantic,eval}/`, `tests/`, `prompts/`, `data/`
-(gitignored), plus `SPEC.md` · `AI_USAGE.md` · `RESULTS.md` · `README.md` · `Makefile`. It permits
-deviation only if recorded here, so the additions are written down rather than assumed:
-
-| Addition | Why |
-|---|---|
-| `.gitignore` | mandated by A1 Q8 |
-| `requirements.txt`, `requirements-embed.txt` | P0 pins dependency versions |
-| `scripts/fetch_data.sh` | P0 downloads; resilience flags documented in-file |
-| `report/` | P5 leaderboard screenshots land here |
-| `src/baselines/` | non-retrieval reference scorers (popularity); keeps them out of `lexical/`/`semantic/` |
-
-Not committed, by decision: the assignment's own working notes, and the TA-provided reference
-notebooks (`ebnerd_analysis` / `mind_analysis`) — third-party material rather than deliverables.
-They remain the cited source for §6 and §9.
-
-## §9 Dataset facts **[P0 — from TA notebooks, re-verify from files at P1]**
-
-### EB-NeRD large
-| File | Rows |
-|---|---|
-| `articles.parquet` | 125,541 articles |
-| `train/behaviors.parquet` | 12,063,890 impressions |
-| `train/history.parquet` | 788,090 users (avg 144 articles, max 1,530) |
-| `validation/behaviors.parquet` | 12,566,385 impressions |
-| `validation/history.parquet` | 791,582 users |
-| `ebnerd_testset/ebnerd_testset/test/behaviors.parquet` | **13,536,710 impressions, no labels** |
-
-Test **lacks** `article_id`, `article_ids_clicked`, `next_read_time`, `next_scroll_percentage`;
-**adds** `is_beyond_accuracy` (1.5% of impressions).
-
-### MIND
-| File | Rows |
-|---|---|
-| `MINDsmall_train/behaviors.tsv` | 156,965 impressions |
-| `MINDsmall_train/news.tsv` | 51,282 articles |
-| `MINDsmall_dev/behaviors.tsv` | 73,152 impressions |
-| `MINDlarge_test/behaviors.tsv` | **2,370,727 impressions, no labels** |
-| `MINDlarge_test/news.tsv` | 120,961 articles |
-| `entity_embedding.vec` | 100-dim TransE, Wikidata |
-
-### Q9 serving-time honesty — the ablation pair **[P0]**
-EB-NeRD hands us the ablation directly. `next_read_time` and `next_scroll_percentage` exist in
-train/validation and are **absent from test**, because they describe the *next* impression —
-future information by construction. They are the "features unavailable at serving time" that Q9
-asks us to report with and without. `is_beyond_accuracy` is likewise test-only.
-
-MIND has no equivalent pair — every column it ships is available at request time. The EB-NeRD
-ablation is therefore the one reported (RESULTS.md Q9), and it is decisive: adding
-`next_read_time` moves AUC from 0.5029 to 0.9629, an inflation of +0.46.
-
-## §10 Open decisions
-
-Carried from the pre-Phase-1 decision list, plus what P0 surfaced.
-
-| # | Decision | Status |
+| Competition | File | Archive |
 |---|---|---|
-| 1 | N, M per dataset | **settled: N=1, M=1** for both, justified by the measured ranges in §3 |
-| 2 | Cold-start threshold; head/tail percentile | **settled**: cold-start ≤5 history clicks; head = top popularity quintile |
-| 3 | Own BM25 vs `rank_bm25` | **settled: own**, library as oracle |
-| 4 | MIND embedding model | **settled: TF-IDF + truncated SVD (128d)**. No torch. See RESULTS.md Q3 for why, and for the explained-variance caveat |
-| 5 | Submission formats verbatim | §6 — **confirmed by acceptance**: MIND scored a submission in this exact format |
-| 6 | C2 boundary (click-log modelling) | **settled** — see below |
+| MIND (13967) | `prediction.txt` | `.zip`, text at archive root |
+| EB-NeRD (2469) | `predictions.txt` | `.zip`, text at archive root |
 
-**C2 boundary.** Nothing built here forecloses Component 2. The scorer interface
-`score(user, candidates) -> list[float]` is model-agnostic, so a learned click model drops in
-beside BM25 and LSA as one more entry in the fusion, using the same harness, the same
-submission writer and the same leakage guarantees. The feature store already carries as-of
-user activity keyed by cutoff, which is the shape a click-log model needs. What is deliberately
-*not* built: any per-user learned parameters, any interaction matrix factorisation, and any
-sequence model over click history.
-| 7 | **Where the large-scale run executes** | **open — see §11** |
+**Confirmed by acceptance:** six submissions in this format were processed by the two scorers —
+four on MIND, two on EB-NeRD.
 
-## §11 The binding constraint: this laptop **[P0, measured 20 Aug 2026]**
+**Duplicate identifiers.** MIND ids are unique. EB-NeRD sets `impression_id = 0` on exactly the
+200,000 rows flagged `is_beyond_accuracy`, a 1:1 correspondence confirmed against the file, so a
+faithful EB-NeRD submission repeats that id legitimately. `validate_file` therefore takes
+`allow_duplicate_ids` and always reports the count, so permitting duplicates never conceals them.
 
-Two hardware measurements change the plan, and both belong in the Q6 "breaks at 10×" section as
-evidence rather than speculation.
+---
 
-**Memory: 7 GB total, ~2 GB available.** The TA notebook annotates its MIND batching as
-"Safe for 10GB RAM" and calls `pl.read_csv` on all 2,370,727 test rows non-lazily. That will not
-fit here. Every large-scale step must be lazy or row-group batched, and the MIND reader in
-particular needs `scan_csv`, not `read_csv`.
+## 7 · Validation protocol for model selection
 
-**Network: 4–13 KB/s, 50% packet loss, 305–1225 ms RTT on `wifi@iiith`.** Measured against three
-independent endpoints (S3 eu-west-1, Cloudflare, HuggingFace), so it is the link, not a server.
-At 13 KB/s the 2.97 GB `ebnerd_large.zip` needs ~63 hours of *uninterrupted* transfer; the full
-~5 GB EB-NeRD set plus MIND exceeds the time remaining before the deadline.
+The dev split cannot detect one class of failure, and submission 3 was scored 0.090 below its
+offline figure because of it.
 
-Consequence: the large-scale path likely cannot run on this laptop at all, and the recommendation
-is to move download **and** prediction for the large bundles to Colab/Kaggle, where the fetch is
-gigabit and RAM is 12–16 GB — keeping the laptop to demo/small for development. Decision §10.7.
+**The failure.** Behavioural features count clicks in trailing windows. MIND's training events end
+14 Nov; dev is 15 Nov; test is 16–22 Nov. A 24-hour lookback from a dev impression still reaches
+training data; the same lookback from a test impression reaches an empty window. `pop_24h`,
+`pop_1h` and `ctr_24h` are zero for 100% of test candidates and for 57.7%, 99.7% and 57.7% of dev
+candidates.
+
+This is **train/serve skew, not leakage** — no future information is used; the features are
+degenerate at serving time. A validation split adjacent to training cannot reveal it.
+
+**The protocol** (`scripts/gap_aware_mind.py`). Counts fitted on events strictly before 13 Nov;
+ranker trained on 14 Nov; evaluated on 15 Nov — two and three days past the last counted event,
+against the test split's two to eight. Both sides therefore sit in the degenerate regime the test
+split imposes.
+
+**Where a model must be selected, this protocol is the authority, not the dev split.**
+
+**Its limits, stated.** Its evaluation day sits two to three days past the counts where the test
+split reaches eight, and `MINDsmall_train` spans six days, so a fully matched window cannot be
+built from it. Measured against the leaderboard it predicts the *direction* of a change correctly
+and overstates the *size*.
+
+**Unexploited on EB-NeRD.** Because EB-NeRD's validation window is contiguous with test (§3),
+fitting counts on `train ∪ validation` would place the model immediately adjacent to the test
+window rather than seven days from it. The shipped EB-NeRD models fit on `train` alone; this is a
+known limitation, not a design choice.
+
+---
+
+## 8 · Environment
+
+Python 3.12.3, virtual environment at `.venv/`. Resolved versions:
+polars 1.43.2 · pyarrow 25.0.1 · numpy 2.5.2 · scikit-learn 1.9.0 · faiss-cpu 1.15.0 ·
+rank-bm25 0.2.2 · pytest 9.1.1 · matplotlib 3.11.1 · huggingface_hub 1.28.0 ·
+torch 2.13.0+cpu · sentence-transformers 6.0.0.
+
+**Polars over Dask.** Dask was available; both reference notebooks use Polars lazy scans, and
+matching them keeps this code cross-referenceable against the course material.
+
+---
+
+## 9 · Repository layout
+
+`src/{pipeline,lexical,semantic,features,baselines,eval}/`, `tests/`, `scripts/`, `report/`,
+`data/` (gitignored), plus `README.md`, `SPEC.md`, `RESULTS.md`, `Makefile`, `requirements*.txt`.
+
+Deviations from the standard layout, recorded rather than assumed:
+
+| Addition | Reason |
+|---|---|
+| `src/features/` | point-in-time aggregation, distinct from the static feature store |
+| `src/baselines/` | non-retrieval reference scorers; keeps them out of `lexical/` and `semantic/` |
+| `scripts/` | data acquisition and experiment drivers |
+| `report/` | Q6 design note and leaderboard screenshots |
+
+Not in the repository, by decision: the AI usage log and the prompt record (both submitted with
+the report), prediction files (delivered through Codabench; A1 Q8 forbids large files in git, which
+overrides Q7.1's mention of them), and third-party reference material.
+
+---
+
+## 10 · Decision log
+
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Build order | Q1 → **Q4** → Q2 → Q3 — the harness is the oracle for the retrievers |
+| 2 | Scorer interface | one scorer, two harnesses (§1) |
+| 3 | N, M per dataset | N=1, M=1, from the observed ranges (§3) |
+| 4 | BM25 implementation | own; `rank_bm25` as oracle only |
+| 5 | IDF variant | Lucene default; Okapi retained for the external check |
+| 6 | Cold-start / head-tail thresholds | ≤5 history clicks; top popularity quintile |
+| 7 | MIND embeddings | TF-IDF + SVD (128d) for the Q3 comparison; `all-MiniLM-L6-v2` (384d) for the final submission, selected under §7 |
+| 8 | EB-NeRD embeddings | publisher-provided word2vec, in preference to multilingual BERT on Danish text |
+| 9 | User vector pooling | mean — recency weighting was ablated and lost |
+| 10 | ANN index | flat (exact), so recall measures the model and not the index's approximation error |
+| 11 | Popularity aggregation | point-in-time; the frozen variant leaks *and* scores worse |
+| 12 | Model selection protocol | gap-aware (§7), not the dev split |
+| 13 | C2 boundary | see below |
+
+**C2 boundary.** Nothing here forecloses Component 2. The scorer interface is model-agnostic, so a
+learned click model drops in beside BM25 and the semantic retriever using the same harness,
+submission writer and leakage guarantees, and the feature store already carries as-of user activity
+keyed by cutoff. Deliberately not built: per-user learned parameters, interaction-matrix
+factorisation, and any sequence model over click history.

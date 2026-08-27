@@ -229,14 +229,19 @@ policy — and none was rejected.
 settles what the earlier "calibration" claim really was: not a constant of the evaluation code,
 but a symptom of how far each test window sits from its training data.
 
-**A fact I should have measured before building the EB-NeRD models.** The scorer's per-day output
-reveals the test window, confirmed against the file: training ends **25 May 2023** and the test
-set runs **1–8 June 2023** — a gap of seven to fourteen days, against MIND's two to eight. This
-single fact explains the whole EB-NeRD picture: why frozen popularity scored 0.4429, below chance;
-why article recency dominated the importance table; and why rolling-versus-frozen made no
-measurable difference, since with a two-week gap no trailing window reaches live data at all. The
-diagnosis was reached the long way round, by measuring feature degeneracy, when reading two
-timestamps would have predicted it.
+**A fact I should have measured before building the EB-NeRD models.** EB-NeRD's three splits are
+contiguous seven-day windows — train 18–25 May, validation 25 May–1 June, test 1–8 June — with
+validation ending one second before test begins. The models fitted counts on `train` alone, which
+sits seven to fourteen days from the test window against MIND's two to eight. That explains the
+whole EB-NeRD picture: frozen popularity at 0.4429, below chance; recency dominating the importance
+table; and rolling-versus-frozen showing no difference, since at that distance no trailing window
+reaches live data.
+
+**The sharper point is that the gap was partly self-imposed.** `validation` is immediately adjacent
+to the test window and went unused. Fitting on `train ∪ validation` would have placed the model
+beside the test window rather than a week from it. The diagnosis was reached the long way, by
+measuring feature degeneracy across 787,307 candidates, when reading three timestamps would have
+predicted it and suggested the fix.
 
 **Whether the gap-aware protocol earned its place.** It predicted MiniLM would beat LSA, and it
 did. It predicted +0.0397 and the leaderboard returned +0.0160 — roughly 40% of the forecast. So

@@ -20,7 +20,7 @@ the gap between them is the measurement.
 
 `HistGradientBoostingClassifier` is used rather than LightGBM: it is the same family of
 histogram-based GBDT, already present in scikit-learn, and needs no download on a link that
-has been the binding constraint all week (SPEC.md §11).
+has been the binding constraint all week (see the environment baseline in RESULTS.md).
 """
 from __future__ import annotations
 

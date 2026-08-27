@@ -64,7 +64,7 @@ def auc(labels, scores) -> float:
 
     Hand-rolled rather than imported so the implementation is explainable, and
     cross-checked against sklearn.metrics.roc_auc_score in tests/test_metrics.py —
-    sklearn is the oracle here, never the implementation (SPEC.md §7).
+    sklearn is the oracle here, never the implementation (SPEC.md §5).
 
     Returns NaN when an impression is all-clicks or all-non-clicks: AUC is undefined
     there, and such impressions must be skipped rather than scored 0.5, which would
