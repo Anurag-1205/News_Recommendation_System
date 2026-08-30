@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Assemble the submission bundles.
 #
-#   report/A1_report.zip    -> Moodle: design note, specification, results, AI usage log,
-#                              measured metrics and run logs, leaderboard screenshots
+#   report/A1_report.zip    -> Moodle: design note, specification, results, AI usage log
+#                              (prompts/), measured metrics and run logs, leaderboard
+#                              screenshots
 #   report/A1_prompts.zip   -> submitted separately: the prompt record (A1 Q7.4)
 #
 # Source code is delivered through GitHub Classroom and is not duplicated here.
@@ -13,7 +14,11 @@ STAGE=report/deliverables
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 
 # --- graded documents -------------------------------------------------------
-cp report/design_note.md SPEC.md RESULTS.md AI_USAGE.md README.md "$STAGE/"
+cp report/design_note.pdf report/design_note.tex report/design_note.md \
+   SPEC.md RESULTS.md README.md "$STAGE/"
+
+# --- AI usage log (A1 Q7.4): the prompt record IS the log ------------------
+cp -r prompts "$STAGE/"
 
 # --- the measured evidence those documents cite -----------------------------
 mkdir -p "$STAGE/metrics" "$STAGE/logs"

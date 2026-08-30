@@ -53,3 +53,16 @@ PLAN.md
 LEARNING_NOTES.md
 ebnerd_analysis.ipynb
 mind_analysis.ipynb
+
+# ============================================================================
+# Design-note build artifacts and the Moodle deliverable itself.
+# The note is submitted through Moodle (see prompts/07 DD-12), not via GitHub;
+# report/design_note.md remains tracked as the readable in-repo version.
+# ============================================================================
+report/*.tex
+report/*.pdf
+report/*.aux
+report/*.out
+report/*.synctex.gz
+report/*.html
+report/*.css

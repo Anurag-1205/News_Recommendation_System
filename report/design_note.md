@@ -1,13 +1,13 @@
 # Lexical and Semantic Retrieval on EB-NeRD and MIND
 
 **CS4.406 Information Retrieval and Extraction — Assignment 1, Component 1**
-Anurag Kaushal · 22 August 2026
+Anurag Kaushal · 27 August 2026
 
 **Scope.** This note covers Q6 of the assignment brief: what was built, the alternatives
 considered, observations from the experiments, and where the pipeline breaks at ten times the
 current scale. Supporting material is cross-referenced as follows — component specifications
 and verification strategy in `SPEC.md`, every measured figure with its originating command in
-`RESULTS.md`, and the tooling disclosure in `AI_USAGE.md`.
+`RESULTS.md`, and the AI-usage disclosure, prompt record and code attribution in `prompts/`.
 
 **Statistical convention.** Every reported metric carries a bootstrap 95% confidence interval
 computed by resampling impressions. Where two intervals overlap, the result is reported as
@@ -127,13 +127,26 @@ Semantic wins where there is history to pool and on *head* articles — popular 
 many near-synonymous headlines, exactly where term overlap fails. On cold-start it has too little
 to pool to help at all.
 
-**Recency-weighted pooling lost to mean pooling**, at every K, by ~40% — contradicting the
-hypothesis it was built to test. News decays fast, so recent clicks *should* describe a user
-better. The likely reason: averaging more history suppresses noise. The decay hypothesis was not
-wrong about news, it was wrong about which quantity is being estimated.
+**The head-article result replicates across both datasets.** On EB-NeRD, using the publisher's
+provided word2vec (300-d, 100% corpus coverage), semantic beats BM25 on head articles
+0.5815 [0.5497, 0.6114] against 0.5243 [0.5002, 0.5493] — disjoint — while every other slice
+overlaps. Two languages, two embedding sources, two publishers, the same slice: the strongest
+cross-dataset finding in this project.
 
-**Coverage is worse than any accuracy metric reveals.** Both models surface under **4%** of the
-catalogue in any top-10, with Gini > 0.90. This is a popularity amplifier, and no AUC would show it.
+**Recency-weighted pooling lost to mean pooling on MIND**, at every K, by ~40% — contradicting
+the hypothesis it was built to test. The likely reason: averaging more history suppresses noise.
+**On EB-NeRD the same ablation reverses** — recency-weighting wins at every K (recall@200 0.0196
+against 0.0156). One mechanism covers both: EB-NeRD is recency-dominated (`age_hours` carries
++0.125 importance, slates are pre-filtered to fresh articles, the test window sits 7–14 days out),
+so a user vector tilted toward recent clicks tracks the current interest; on MIND the
+noise-suppression argument wins instead. The decay hypothesis was right about news and wrong about
+which quantity is being estimated — on *one* of the two datasets.
+
+**Coverage is worse than any accuracy metric reveals — on MIND.** Both models surface under **4%**
+of the catalogue in any top-10 there, with Gini > 0.90: a popularity amplifier no AUC would expose.
+On EB-NeRD the same measurement gives 12.4% coverage and Gini 0.70 — materially healthier, most
+likely because its slates are already pre-filtered to a narrower fresh pool. The defect is real but
+dataset-specific, and is not generalised beyond where it was measured.
 
 **Serving-time honesty is not a formality.** Adding EB-NeRD's `next_read_time` — absent from test
 by construction — moves AUC from **0.5029 to 0.9629**, an inflation of **+0.46**. A chance-level
@@ -211,18 +224,31 @@ distinct clicked articles. This is a material limitation on the EB-NeRD figures 
 
 ## 5. Submissions
 
-| # | Dataset | Model | Leaderboard AUC |
-|---|---|---|---|
-| 1 | MIND | popularity | 0.5036 |
-| 2 | MIND | weighted-sum fusion (BM25 + popularity) | 0.5258 |
-| 3 | MIND | point-in-time GBDT, LSA semantics | 0.5554 |
-| 4 | MIND | **MiniLM semantics, skew-resistant features** | **0.5714** |
-| 5 | EB-NeRD | BM25 | 0.5110 |
-| 6 | EB-NeRD | point-in-time GBDT + article recency | submitted, result pending |
+| # | Dataset | Model | Date | Leaderboard AUC |
+|---|---|---|---|---|
+| 1 | MIND | popularity | 22 Aug | 0.5036 |
+| 2 | MIND | weighted-sum fusion (BM25 + popularity) | 25 Aug | 0.5258 |
+| 3 | MIND | point-in-time GBDT, LSA semantics | 25 Aug | 0.5554 |
+| 4 | MIND | **MiniLM semantics, skew-resistant features** | 27 Aug | **0.5714** |
+| 5 | EB-NeRD | BM25 | 25 Aug | 0.5110 |
+| 6 | EB-NeRD | point-in-time GBDT + article recency | 27 Aug | submitted, not yet scored |
 
 Four MIND submissions, improving monotonically on all four metrics, **+0.0678 AUC** in total.
 Every file was validated offline before upload — line count, permutation validity, duplicate
-policy — and none was rejected.
+policy — and none was rejected. EB-NeRD submission 6 was accepted on 27 Aug and Codabench had
+not published a score at the time of writing; its offline figure is 0.7084 [0.7054, 0.7112]
+against submission 5's 0.5030, but no leaderboard claim is made for it here.
+
+**Leaderboard standing** (Q5, Q7.3). MIND: **rank 78**, submission 903452, AUC 0.5714 · MRR
+0.2669 · nDCG@5 0.2795 · nDCG@10 0.3354. EB-NeRD: **rank 190**, submission 901345, AUC 0.5110 ·
+MRR 0.3303 · nDCG@5 0.3633 · nDCG@10 0.4462. Both figures match `RESULTS.md` exactly.
+
+![MIND leaderboard — Codabench 13967, rank 78, AUC 0.5714](mind_leaderboard.png)
+
+![EB-NeRD leaderboard — RecSys 2024 Codabench 2469, rank 190, AUC 0.5110](ebnerd_leaderboard.png)
+
+*Rank is recorded because the brief asks for the screenshots, not because it is graded — the
+brief states grading is never on leaderboard rank.*
 
 **The offset is a property of the dataset, not the harness.** Every MIND submission returned
 *below* its offline figure. EB-NeRD returned *above* it — 0.5110 against an offline 0.5030. That

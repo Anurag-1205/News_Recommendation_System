@@ -1,7 +1,18 @@
 # Lexical and Semantic Retrieval on MIND and EB-NeRD
 
 **CS4.406 Information Retrieval and Extraction — Assignment 1, Component 1**
-Individual submission · Due 27 August 2026
+
+| | |
+|---|---|
+| **Name** | Anurag Kaushal |
+| **Roll number** | 2025202013 |
+| **Programme** | M.Tech CSIS |
+| **Repository** | https://github.com/Anurag-1205/News_Recommendation_System |
+| **Submission** | Individual · due 27 August 2026 |
+
+**Leaderboards.** MIND ([Codabench 13967](https://www.codabench.org/competitions/13967/)) —
+rank 78, AUC 0.5714. EB-NeRD / RecSys 2024
+([Codabench 2469](https://www.codabench.org/competitions/2469/)) — rank 190, AUC 0.5110.
 
 A reproducible pipeline that ranks the candidate articles of an impression by click
 likelihood, using click history, session context and article content, on **EB-NeRD** (Danish,
@@ -55,7 +66,7 @@ make fetch-large   # EB-NeRD large + testset + embeddings
 |---|---|
 | **Q1** reproducible pipeline, temporal split | done — `make data`, disjointness asserted at build |
 | **Q2** BM25 lexical retrieval, recall@K | done — own index + scorer, `n_recent` ablation, both datasets (MIND `n_recent`=5 wins, EB-NeRD `n_recent`=20 wins — opposite, measured not assumed) |
-| **Q3** semantic retrieval, ANN, lexical-vs-semantic by slice | done on MIND (LSA + FAISS, pooling ablation, by-slice comparison) — **EB-NeRD semantic recall@K still open** |
+| **Q3** semantic retrieval, ANN, lexical-vs-semantic by slice | done — both datasets. MIND: LSA→MiniLM + FAISS. EB-NeRD: provided word2vec (100% coverage) + FAISS. Pooling ablation reverses between them (mean wins on MIND, recency on EB-NeRD) |
 | **Q4** eval harness, beyond-accuracy, slices, bootstrap CIs | done |
 | **Q5** both Codabench leaderboards | MIND 0.5036 → 0.5258 → 0.5554 → **0.5714** (four, monotonic); EB-NeRD **0.5110**, second submission pending |
 | **Q6** design note | `report/design_note.md` |
