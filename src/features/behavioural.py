@@ -31,6 +31,7 @@ SERVING_OK = {
     "n_prior_clicks_in_session": True,
     "hist_read_time_mean": True,
     "hist_scroll_mean": True,
+    "freshness_hours": True,
     "session_len": False,               # counts the session's impressions *after* t
     "cur_read_time": False,             # the current page view outlasts the moment of serving
     "cur_scroll_percentage": False,     # likewise
@@ -306,6 +307,36 @@ def dwell_features(history: pl.DataFrame, requests: pl.DataFrame) -> pl.DataFram
             .with_columns(pl.col("hist_read_time_mean", "hist_scroll_mean").fill_null(math.nan))
             .sort("_row")
             .drop("_row")
+            .collect())
+
+
+def freshness_batch(first_known: pl.DataFrame, requests: pl.DataFrame, *,
+                    untimed_ts: datetime | None = None) -> pl.DataFrame:
+    """`freshness_hours`: how long before t the candidate was first known to exist (SPEC.md §11.8).
+
+    `first_known`: `article_id`, `ts` — EB-NeRD: one row per article with its `published_time`;
+    MIND (no publish time): one row per appearance in any impression, plus history articles with a
+    null `ts` stamped by `untimed_ts`. `requests`: `article_id`, `t` and passthrough columns.
+
+    The earliest sighting *strictly before t* is the article's overall earliest sighting whenever
+    that one is before t — so one group-by gives it, no pair table. NaN when nothing qualifies:
+    unknown article, first seen at or after t, or (EB-NeRD) a publish time recorded as ≥ t, which
+    can only be a later rewrite of the metadata.
+    """
+    if untimed_ts is not None:
+        first_known = first_known.with_columns(pl.col("ts").fill_null(untimed_ts))
+    elif first_known["ts"].null_count():
+        raise ValueError(f"{first_known['ts'].null_count()} sighting(s) have a null ts; "
+                         "pass untimed_ts to stamp them explicitly")
+
+    first_seen = first_known.lazy().group_by("article_id").agg(first_seen=pl.col("ts").min())
+    age_hours = (pl.col("t") - pl.col("first_seen")).dt.total_microseconds() / 3.6e9
+    return (requests.lazy().with_row_index("_row")
+            .join(first_seen, on="article_id", how="left")
+            .with_columns(freshness_hours=pl.when(pl.col("first_seen") < pl.col("t"))   # strict
+                          .then(age_hours).otherwise(pl.lit(math.nan)))
+            .sort("_row")
+            .drop("_row", "first_seen")
             .collect())
 
 

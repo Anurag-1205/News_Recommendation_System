@@ -21,6 +21,7 @@ tqdm==4.70.0
 matplotlib==3.11.1
 huggingface_hub[cli]==1.28.0
 kaggle==2.2.4              # CLI: push code/data as datasets, run kernels on Kaggle T4s (CONTEXT.md C-004)
+lightgbm==4.7.0            # listwise reranker: LGBMRanker(objective="lambdarank") (CONTEXT.md C-016)
 
 # --- Transitive dependencies, pinned for exact reproducibility ---------------------------------
 # The full dependency closure of the packages above, as installed. Not imported directly by our code.

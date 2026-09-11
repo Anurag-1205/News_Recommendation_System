@@ -21,13 +21,13 @@ _Last updated: 2026-09-11 by Anurag (agent: Claude Code)_
 | | |
 |---|---|
 | Branch | `a2-click-logs`, from `main` at `be15ee6` (A1 final) |
-| Phase | **P1 Behavioural features, mostly built** (Anurag). Done: recency profile, category match (reference + batch), slate, session, dwell, the unsafe registry. Left: freshness (`published_time` / MIND first-seen), click count, and the half-life choice (P1-D2). P0 exit-gate items owned by Aayush are still open. See `PLAN.md` §3 |
-| Team | **Anurag Kaushal**: modelling (P1, P2, P3.1). **Aayush Pandey**: measurement (P3.4a paired bootstrap, P4, P5). Joint: P0, P3.2–3.4, P6. Final (C-005) |
-| Anurag Kaushal | Commits `54cf185` (recency) and the P1-block commit that follows it (C-009, C-011–C-013; **279 green**) are local, and **neither is pushed yet**: the agent shell has no GitHub credentials, so Anurag pushes both. Next P1 units: freshness, then running the h grid on EB-NeRD through the batch path to settle P1-D2. Still owed from P0: NRMS smoke test on Kaggle (PLAN P0.7) |
-| Aayush Pandey | not started. Now: P0 clean-clone check (`make env && make test`) and Kaggle verification on Aayush's account (PLAN P0.2–P0.3). Next: P3.4a paired bootstrap harness (12–14 Sep) |
+| Phase | **P1 done** (C-014). **P2 locked** (C-018) in `src/rerank/config.FINAL`: EB-NeRD lambdarank without dwell, AUC 0.6728; MIND pointwise A1 v4, AUC 0.6747. Committed in the Phase 2 commit ("P2: two-stage reranker locked …"), which also carries the C-019 roster change. Open for Q2: D1 framing (b), retrieving a top-K from the corpus. **`54cf185` and `87c87cf` were NOT on GitHub** at 22:10 on 11 Sep (`git ls-remote` showed `779cad4`), so Aayush is blocked until Anurag pushes. P0 exit-gate items owned by Aayush are still open. See `PLAN.md` §3 |
+| Team | Revised in **C-019**. **Anurag Kaushal**: P1 and P2 (done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS on Kaggle, paired bootstrap, the change and its ablation), P4, P5 joint, P6 joint. Anurag reviews every Q3 "beats" claim |
+| Anurag Kaushal | **Committed but NOT on GitHub:** `54cf185`, `87c87cf`, and the Phase 2 commit (which includes C-019). **Push all three first** (Aayush is blocked). Next: P5 (joint), proposed as `make eval` plus the Kaggle submission pipeline for `config.FINAL`; D1 framing (b); reviewing Aayush's Q3 claims |
+| Aayush Pandey | Not started, and **blocked until Anurag pushes**. Now: P0 (`git pull`, `make env && make test`, **318 expected**; Kaggle check on Aayush's account). Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → NRMS on both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4. P5 joint |
 | Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004) |
 | Blocked on | team decisions D1–D9 in `PLAN.md` §5; the scores-file format (`PLAN.md` §2) must be agreed and pinned in `SPEC.md` |
-| Next up | **Aayush:** once Anurag pushes, `git pull` and run `make env && make test`. With the pins (C-011), a fresh venv from `requirements.txt` gave 279 passed on this machine, and `make check-data` re-derives every data fact behind C-013. Please review C-013's two corrections to your schema mapping (`session_len` unsafe; `n_prior_clicks_in_session` absent from the test file). **Both:** the submission model must exclude `UNSAFE_FEATURES` and `ABSENT_FROM_TEST_FILE` (`src/features/behavioural.py`) |
+| Next up | **Anurag:** push the three local commits, then check that `git ls-remote origin a2-click-logs` shows the same hash as `git rev-parse HEAD`. **Aayush:** pull, `make test` (318), review C-013's two corrections, start P3.1 on Kaggle. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
 
 ---
 
@@ -456,6 +456,232 @@ Entry format:
   (new), `scripts/check_phase1_data.py` (new), `Makefile` (`check-data`), `SPEC.md` §11.4–§11.7,
   `RESULTS.md` Q1
 - Status: active. **Aayush to review the two corrections.**
+
+### C-014 · Freshness defined (Q1.3); half-life decided: h = ∞, i.e. no decay (P1-D2 closed)
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code)
+- **Freshness.** `freshness_batch` gives `freshness_hours` = t − the article's first known time,
+  strictly before t (`SPEC.md` §11.8).
+  - EB-NeRD's first known time is `published_time`; MIND's is the first impression that listed
+    the article, with history articles stamped at 2019-11-09.
+  - One group-by suffices, because the earliest sighting before t is the overall earliest
+    whenever that is before t.
+  - A publish time ≥ t gives NaN, since it must be a later rewrite of the metadata. Measured:
+    23 of 1.2M EB-NeRD rows.
+  - Evidence: `tests/test_freshness.py`, 8 tests, red (`AttributeError` / `KeyError`) → green. A
+    `<=` boundary mutant fails 3/8.
+- **Half-life: h = ∞ (no decay), for both datasets.**
+  - The grid ran on 50,000 EB-NeRD validation impressions, single-feature ranking, with paired
+    bootstrap vs ∞: 6 h −0.0063 AUC and 24 h −0.0016 (both CIs exclude 0); 72 h +0.0003,
+    CI [−0.0007, +0.0014] (includes 0).
+  - 72 h had the highest point estimate, but it is not a win (`CLAUDE.md` §4), so the simpler
+    no-decay choice was taken.
+  - It was then **confirmed inside the full GBDT:** A2 with h = 72 h is worse than h = ∞ by 0.0035
+    AUC, CI [−0.0052, −0.0020].
+  - On MIND h is irrelevant anyway (C-008).
+  - Command: `scripts/tune_half_life_ebnerd.py`; numbers in `RESULTS.md` Q1.
+- **Consequence:** `recency_weighted_profile` is in effect the undecayed category distribution on
+  both datasets. "Freshness weighting of history" is therefore **not** a promising D4 candidate.
+  The time signal that matters is article freshness, already in the base set.
+- Also measured: as a *single-feature ranker* `category_match` is identical to
+  `recency_weighted_profile`. ‖P‖ is constant within an impression, so its extra information only
+  helps across impressions.
+- Affects: `src/features/behavioural.py` (`freshness_batch`, registry), `tests/test_freshness.py`,
+  `SPEC.md` §11.8, `scripts/tune_half_life_ebnerd.py`
+- Status: active
+
+### C-015 · Phase 2 reranker v1: temporal protocol, a correction to A1, and a negative result for the Phase 1 features
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code)
+- Built: `src/rerank/` (`common.py`, `ebnerd.py`, `mind.py`), `scripts/rerank_ebnerd_a2.py` and
+  `scripts/rerank_mind_a2.py` (`SPEC.md` §12).
+  - It uses A1's stage-1 generators as scores, A1's pointwise HistGBDT with the same
+    hyperparameters, and in-impression reranking (PLAN **D1 framing (a)** only; (b) and (c) are
+    still open; **D2 still open**).
+  - **`model_features` is the single gate:** it drops `UNSAFE_FEATURES` and
+    `ABSENT_FROM_TEST_FILE`, and both scripts assert it.
+  - The test-file check runs the full pipeline on 5,000 unlabelled test impressions per dataset:
+    no label, no click count, finite predictions.
+- **Protocol: fit on the train period, evaluate on the next period** (EB-NeRD train → validation
+  week; MINDsmall_train → dev). Impressions are seeded random samples within a split.
+- **Correction to A1.** A1's EB-NeRD reranker (AUC 0.7084) fitted and evaluated within the
+  validation file, split 70/30 by *row order*. Measured: `behaviors.parquet` is **not
+  time-sorted** in train or validation, so that split was not temporal, and its number is not
+  comparable. Recorded here rather than silently dropped.
+- **Results** (`RESULTS.md` Q2; paired bootstrap on the same impressions):
+  - **The two-stage gain is large and significant:** EB-NeRD GBDT − BM25 is +0.133 AUC; MIND
+    GBDT − MiniLM is +0.037 AUC.
+  - **The Phase 1 features do not help yet:**
+    - EB-NeRD A2 − base: AUC +0.0009 [−0.0009, +0.0026] (no difference), while MRR/nDCG are
+      −0.002 (significant, small);
+    - MIND A2 − base: AUC −0.0021 [−0.0031, −0.0009], with all four metrics significantly worse.
+  - The cross-implementation check holds: on MIND, `recency_weighted_profile` = A1 `cat_affinity`
+    to 1.1e-16.
+- Known limitation: absolute values are optimistic (evaluation sits right after training; A1's
+  offline-to-leaderboard offset was −0.03 to −0.09). Differences between rows are what is reliable.
+- **Next, proposed and not yet decided:**
+  1. a drop-one ablation of the Phase 1 features, to find which one costs the drop;
+  2. PLAN D2: LightGBM `lambdarank`, since the pointwise objective may be what wastes the
+     within-impression features. That needs a new pinned dependency (C-011 procedure).
+
+  Permutation importance must not be used to judge impression-constant features: `n_candidates`
+  ranks first while being unable to reorder candidates.
+- **Note for Aayush (stream ownership, `CLAUDE.md` §3):** `src/rerank/common.paired_delta` is a
+  *minimal, provisional* paired bootstrap written to measure this run (with 4 tests). Your P3.4a
+  harness is the team's version. Please replace it or adopt it after review, and log which.
+- Affects: `src/rerank/*` (new), `scripts/rerank_ebnerd_a2.py`, `scripts/rerank_mind_a2.py`,
+  `tests/test_rerank_*.py` (new), `SPEC.md` §12, `RESULTS.md` Q2
+- Status: active
+
+### C-016 · D2: LightGBM lambdarank adopted as the reranker objective (Anurag's decision), with a contrary MIND result recorded
+- Date / author: 2026-09-11 · decision by Anurag Kaushal ("switching to LightGBM lambdarank");
+  implementation and measurements by Claude Code
+- Decision:
+  - The reranker objective becomes **listwise**: `LGBMRanker(objective="lambdarank")`, **one query
+    per impression**.
+  - Groups come from contiguous `imp_row` runs (`common.group_sizes`, which rejects interleaved
+    rows). The key is `imp_row`, not `impression_id`, because the EB-NeRD test file repeats
+    impression_id 0.
+  - The capacity matches the pointwise model: 300 trees, lr 0.08, 31 leaves.
+  - It is deterministic: `deterministic=True`, `force_row_wise=True`, `n_jobs=4`; refits are
+    bit-identical (tested).
+- Dependency (C-011 procedure):
+  - `lightgbm==4.7.0` was added to `requirements.txt`, installed under the existing pins as
+    constraints. Its dependencies (numpy, scipy, narwhals) were already pinned, so it is the only
+    new package: **65 pins**.
+  - A fresh venv from the file gives a clean `pip check`, a freeze equal to the pins, and 310 tests
+    passing.
+- Evidence (`RESULTS.md` Q2; paired bootstrap, same impressions):
+  - **EB-NeRD supports the switch strongly.** Lambdarank − pointwise is **+0.0343 AUC** on base
+    features and +0.0217 on A2, and all four metrics improve with CIs excluding 0.
+  - **MIND contradicts it.** Lambdarank − pointwise is **−0.0084 AUC** on base features and
+    −0.0051 on A2, and all four metrics are worse with CIs excluding 0.
+  - Untested hypothesis for MIND: long slates (mean 37, max 299, against EB-NeRD's 11 and 100)
+    meet LightGBM's default `lambdarank_truncation_level` of 30.
+- **The conditional ablation ran on both datasets** (the trigger is fixed in `common.drop_reasons`):
+  - **EB-NeRD:** under lambdarank, A2 − base is −0.0118 AUC. The **dwell family is toxic**:
+    removing it gives +0.0144 AUC / +0.0135 MRR / +0.0158 nDCG@5 / +0.0120 nDCG@10. **A2 without
+    dwell beats the base on all four metrics** (AUC +0.0026, CI [+0.0014, +0.0038]).
+  - Also on EB-NeRD: the category profile helps (removing it costs 0.0091 AUC); session and list
+    position are mildly negative on AUC and flat or mixed on MRR/nDCG.
+  - **MIND:** A2 − base is AUC +0.0013 but MRR/nDCG −0.002. **First-seen freshness** costs top-rank
+    quality (removing it gives MRR +0.0027, nDCG@5 +0.0025, nDCG@10 +0.0021) while helping AUC
+    (−0.0015 when removed). Category match and list position help.
+- **Status: active for EB-NeRD. Contested for MIND,** where the measured result goes against the
+  decision as stated. **Anurag to choose** between:
+  - (a) lambdarank everywhere, for one model family, accepting about −0.008 AUC on MIND;
+  - (b) a per-dataset objective: lambdarank for EB-NeRD, pointwise for MIND;
+  - (c) first test `lambdarank_truncation_level` ≥ the maximum slate on MIND, then decide.
+
+  Recommendation: (c). It is one cheap run and tests the only hypothesis that could reconcile the
+  two datasets. **Resolved in C-018:** (c) was tested and failed (C-017), and (b) was adopted.
+- **Not yet adoptable: "A2 without dwell".** It was identified on the same validation impressions
+  it would be chosen on, which is selection bias. Confirm it on held-out impressions (a different
+  seeded sample, or the gap-aware protocol) before changing the shipped feature set.
+  - Candidate explanation to test: the dwell means are constant within an impression, so under a
+    listwise loss they act only through interactions that may not transfer from one week to the
+    next.
+- Affects: `requirements.txt`, `src/rerank/common.py` (`fit_lambdarank`, `group_sizes`,
+  `drop_reasons`, `leave_one_family_out`, `report`, `conditional_ablation`, `matrix`), both
+  reranker scripts, `tests/test_rerank_common.py` (+8), `SPEC.md` §12, `RESULTS.md` Q2
+
+### C-017 · Evidence for the final Phase 2 configuration: the truncation check fails on MIND, and the dwell drop holds on a holdout
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code). **Findings only. The configuration
+  lock-in is Anurag's, pending.**
+- **MIND, C-016 option (c): tested and ruled out** (`scripts/check_truncation_mind.py`).
+  - Setup: `lambdarank_truncation_level=300`, covering the longest slate of 299. `fit_lambdarank`
+    now takes parameter overrides, and a test proves LightGBM consumes the parameter (truncation 1
+    and 5 train different models).
+  - Truncation 300 − 30 on the base features, all dev: AUC −0.0002, CI [−0.0010, +0.0006], and
+    the sign flips between dev halves (−0.0021 / +0.0016).
+  - **Lambdarank at truncation 300 still loses to pointwise:** −0.0087 AUC over all dev, −0.0134
+    in the earlier half and −0.0040 in the later half, with all CIs excluding 0.
+  - What the evidence now supports is **C-016 option (b): a per-dataset objective**, lambdarank
+    for EB-NeRD and pointwise for MIND. Option (a), lambdarank everywhere, costs about 0.009 AUC on
+    MIND.
+- **EB-NeRD dwell: the finding holds out of sample** (`scripts/holdout_dwell_ebnerd.py`).
+  - Setup: the same 100,000-impression fit. The ablation's 100,000 validation impressions are the
+    *selection* set; the other 144,647 validation-week impressions, disjoint and never scored, are
+    the *holdout*.
+  - Selection reproduces C-016 exactly.
+  - On the holdout: dropping dwell gives +0.0151 AUC over A2, and **A2 without dwell beats the base
+    on all four metrics** (AUC +0.0029 [+0.0018, +0.0039], nDCG@10 +0.0014 [+0.0004, +0.0023]).
+  - Limit: the holdout shares the week, so it rules out sample-fitting but not drift.
+- **Proposed lock-in, awaiting Anurag:**
+  - **EB-NeRD:** lambdarank, with features A1 base + category profile + list position + session.
+    `hist_read_time_mean` and `hist_scroll_mean` stay computed and registered but out of the
+    model.
+  - **MIND:** pointwise HistGBDT, with the A1 v4 base features. None of the Phase 1 additions beat
+    the base there under either objective (pointwise A2 −0.0021 AUC; lambdarank A2 mixed).
+- Also measured: every MIND model is weaker in the later half of the dev day (pointwise AUC
+  0.7016 → 0.6479), consistent with A1's staleness finding. This is material for the "breaks at
+  10×" and drift discussion.
+- Refactor: `scripts/rerank_ebnerd_a2.build` now takes an explicit impression sample
+  (`seeded_sample`) so a holdout can be the complement. The draw is unchanged, as the reproduced
+  selection numbers show.
+- Affects: `src/rerank/common.py` (`fit_lambdarank(**overrides)`), `tests/test_rerank_common.py`
+  (+2), `scripts/check_truncation_mind.py` and `scripts/holdout_dwell_ebnerd.py` (new),
+  `scripts/rerank_ebnerd_a2.py` (`seeded_sample`, `build`), `RESULTS.md` Q2 follow-ups
+- Status: evidence recorded; decided in C-018
+
+### C-018 · Phase 2 locked: EB-NeRD lambdarank without dwell; MIND pointwise with A1 v4 features
+- Date / author: 2026-09-11 · decision by Anurag Kaushal ("The metrics are validated. Let's lock
+  in Phase 2"); code by Claude Code
+- Decision:
+  - The shipped reranker configuration is `src/rerank/config.FINAL`:
+    - **EB-NeRD:** `lambdarank`, 11 features: the A1 base + `recency_weighted_profile`,
+      `category_match`, `cand_position`, `session_pos`. `hist_read_time_mean` and
+      `hist_scroll_mean` stay computed and registered but out of the model.
+    - **MIND:** `pointwise` HistGBDT, with the A1 v4 base's 7 features.
+  - That resolves C-016 with option (b), a per-dataset objective, after option (c) failed in C-017.
+- Why:
+  - EB-NeRD: lambdarank beats pointwise by +0.034 AUC. Without dwell, A2 beats the base on all
+    four metrics, and that holds on 144,647 held-out impressions (AUC +0.0029 [+0.0018, +0.0039]).
+  - MIND: pointwise beats lambdarank by 0.0087 AUC in both halves of dev, and no Phase 1 addition
+    beats the base.
+- **Enforced in code:**
+  - Both reranker scripts assert that `FINAL` equals the model they measured (EB-NeRD: A2 minus
+    the dwell family; MIND: the base). For MIND they also assert that the final model's predictions
+    are bit-identical to the measured base fit.
+  - The test-file checks now score with the final models.
+  - `tests/test_rerank_config.py` (6 tests) pins the invariants.
+  - `common.fit_final` / `predict_scores` dispatch on the objective.
+- **Still open against the brief (flagged, not decided):** Q2.1 wants A1's generators to
+  *retrieve* a top-K (100–200) from the corpus before re-ranking, which is PLAN D1 framing (b).
+  The locked configuration re-ranks each impression's own candidates (framing (a)). Framing (b)
+  still has to be built and measured for Q2 to be complete.
+- Affects: `src/rerank/config.py` (new), `src/rerank/common.py` (`fit_final`, `predict_scores`),
+  `tests/test_rerank_config.py` (new), both reranker scripts, `SPEC.md` §12.1
+- Status: active
+
+### C-019 · Ownership change: all of Phase 3 goes to Aayush; Phase 5 becomes joint
+- Date / author: 2026-09-11 · decision by Anurag Kaushal; logged by Claude Code. This revises
+  C-005's split for the remaining phases.
+- Decision:
+  - **P3, the whole Q3 track, goes to Aayush Pandey exclusively:**
+    - P3.1: the Kaggle NRMS baseline reproduction on EB-NeRD and MIND (2× T4, fp16);
+    - P3.4a: the paired-bootstrap CI harness;
+    - P3.2–3.4: the one principled change and its ablation.
+  - **P5 (extended evaluation + Codabench submissions) becomes joint:** Anurag Kaushal & Aayush
+    Pandey.
+  - **Unchanged:** P4 (Aayush), P6 (joint). P1 and P2 (Anurag) are done or locked (C-014, C-018).
+  - `PLAN.md` §0, §2 and §3, plus the P3/P5 headings and the day-0 NRMS step, are updated to match.
+- Why: Anurag's modelling phases are complete, so the NRMS reproduction moves to Aayush, who takes
+  over the Kaggle baseline work. Sharing P5 means the full-scale submission runs for the locked
+  reranker (`config.FINAL`) do not queue behind Aayush's P3 and P4.
+- **Consequences to manage:**
+  - **Builder and judge are the same person for Q3.** C-005 separated them. The mitigation written
+    into `PLAN.md` §2: **Anurag reviews every Q3 "beats" claim**, meaning the paired CI and its
+    command, before it goes into `RESULTS.md`.
+  - **Aayush's load is now the critical path.** P3.1, P3.4a and P4 overlap across 12–17 Sep, and
+    Aayush is **still blocked**: the Phase 1/2 commits are not on GitHub (C-017 note).
+  - **Kaggle GPU quota:** NRMS training on Aayush's account; P5 test-set inference on Anurag's.
+  - **The provisional `src/rerank/common.paired_delta`** (C-015) falls inside Aayush's P3.4a, to
+    replace or adopt.
+  - **Proposed P5 split, not yet agreed:** Anurag takes `make eval` and the resumable Kaggle
+    submission pipeline for `config.FINAL`; Aayush's `make bench` stays under P4 (`PLAN.md` §2
+    table).
+- Anurag's other open item: Q2.1 retrieval framing (b) (C-018).
+- Affects: `PLAN.md` (§0 team row and consequences, §2, §3, P3/P5 headings, P0 steps 6–7), `CONTEXT.md` §1
+- Status: active
 
 ---
 

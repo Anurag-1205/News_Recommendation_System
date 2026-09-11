@@ -17,7 +17,7 @@ A1 is finished and frozen on `main` at `be15ee6`. A2 lives on branch `a2-click-l
 | A2 due | **Sun 20 Sep 2026** (report on Moodle, code on GitHub) |
 | Calendar days left | **9** |
 | Realistic code freeze | **Sat 19 Sep, 18:00**. The 20th is buffer and must not hold planned work |
-| Team | **Anurag Kaushal** (modelling: P1, P2, P3.1) · **Aayush Pandey** (measurement: paired bootstrap, P4, P5). Joint: P0, P3.2–3.4, P6. See §2 and `CONTEXT.md` C-005 |
+| Team | **Anurag Kaushal**: P1, P2 (both done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS baseline, improvement, ablation, paired bootstrap), P4, P5 joint, P6 joint. See §2 and `CONTEXT.md` C-005, C-019 |
 | Compute | **Kaggle: 2× T4 GPU, fp16, RAM not a constraint.** The laptop (7 GB, no GPU) is for dev, tests and toy-scale runs only (C-004) |
 
 Consequences:
@@ -27,11 +27,11 @@ Consequences:
    13.5M-impression pass is still hours of work, and Kaggle sessions have a time limit. The first A2
    submission on both leaderboards has to land by **Wed 16 Sep**, even if it is weak.
 2. **The NRMS baseline is the biggest unknown.** It needs a GPU (Kaggle T4, fp16), an external
-   codebase and a different data loader. Anurag starts it on day 1 as Kaggle background jobs that
-   run while P1/P2 are being coded, not after the reranker.
-3. **Anurag's 12–15 Sep window is the critical path.** It holds P1, P2 and P3.1, and Aayush's final
-   numbers depend on its output. §2 keeps Aayush unblocked by building every harness first against
-   A1's existing outputs, so Anurag's models plug into finished tooling instead of waiting for it.
+   codebase and a different data loader. Since C-019 it is Aayush's, and it should start as soon as
+   Aayush is unblocked: Kaggle background jobs, not a step after everything else.
+3. **The critical path is now Aayush's NRMS on Kaggle (P3.1), alongside P4.** P1 and P2 are done
+   (C-018), and Q3's comparisons need the NRMS score files. P5 is joint so Anurag can carry the
+   submission runs while Aayush is on P3/P4 (C-019).
 4. **Grading is never on rank.** It is on correctness, system design, ablation rigour, scale
    analysis and note clarity. If a day is being spent chasing rank, the plan has gone wrong.
 
@@ -68,41 +68,51 @@ A1 best leaderboard results, as the reference point: **MIND AUC 0.5714**, **EB-N
 
 ---
 
-## 2. Team and ownership (final, `CONTEXT.md` C-005)
+## 2. Team and ownership (revised 11 Sep, `CONTEXT.md` C-019; original split C-005)
 
 | Phase | Owner | Scope |
 |---|---|---|
 | **P0** Setup | Anurag Kaushal & Aayush Pandey | clean-clone check (`make env && make test` on Aayush's machine); Kaggle verification on both accounts |
-| **P1** Behavioural features (Q1) | Anurag Kaushal | all Q1 features and their leakage tests |
-| **P2** Two-stage reranker (Q2) | Anurag Kaushal | stage-1 candidates → GBDT; before/after table |
-| **P3.1** Reproduce NRMS (Q3.1) | Anurag Kaushal | Kaggle 2× T4, fp16; official baseline scores on EB-NeRD and MIND |
-| **P3.2–3.4** Improve + ablate (Q3.2–3.4) | Aayush Pandey & Anurag Kaushal | the modelling improvement is joint; **Aayush drives the paired bootstrap CI harness** |
+| **P1** Behavioural features (Q1) | Anurag Kaushal | **done** (C-006 – C-014) |
+| **P2** Two-stage reranker (Q2) | Anurag Kaushal | **locked** (C-018): `src/rerank/config.FINAL`. Open: D1 framing (b), retrieving a top-K from the corpus as Q2.1 asks |
+| **P3** Baseline + improvement (Q3): P3.1, P3.4a, P3.2–3.4 | **Aayush Pandey** | NRMS reproduction on Kaggle (2× T4, fp16) on both datasets; the paired bootstrap CI harness; the one principled change and its ablation |
 | **P4** Serving & scale (Q4) | Aayush Pandey | index memory, p99 latency, SLA cost model, 10× breakdown |
-| **P5** Extended eval + Codabench (Q5) | Aayush Pandey | diversity/novelty/coverage, cold/warm and head/tail slices, submission runs |
+| **P5** Extended eval + Codabench (Q5) | **Anurag Kaushal & Aayush Pandey** | diversity/novelty/coverage, cold/warm and head/tail slices, full test-set submission runs on Kaggle, screenshots |
 | **P6** Design note + ship (Q6–Q9) | Anurag Kaushal & Aayush Pandey | report, checklist, final push |
 
-**The shape of the split.** Anurag owns *modelling* end to end: features, reranker and the NRMS
-baseline, so one person can explain every model that produces a score. Aayush owns *measurement*:
-significance testing, evaluation, serving benchmarks, submissions and scaling. A useful side
-effect is that the person who judges a model is not the person who built it, which makes every
-claimed gain an independent check (`CLAUDE.md` rule 2).
+**The shape of the split (revised).**
 
-**The handoff is a scores file per system per split:** `impression_id, article_id, score` as
-Parquet. Anurag's models (GBDT, NRMS, each ablation row) write it; Aayush's harnesses (paired
-bootstrap, `make eval`, submission writer) read it. Neither person imports the other's code.
-Pin this format in `SPEC.md` on day 1. It is the contract between the two halves.
+- **Anurag** built the behavioural features and the reranker (P1 and P2, both done).
+- **Aayush** owns the whole Q3 track: reproducing NRMS, the principled change, its ablation, and
+  the paired-bootstrap harness that judges it. He also owns serving (P4).
+- **Evaluation and submissions (P5) are shared,** so the full-scale Kaggle runs do not queue
+  behind P3 and P4.
 
-**Keeping Aayush unblocked before Anurag's models exist.** Every Aayush harness is built and tested
-first against **A1's existing outputs**. Aayush first exports the A1 MIND v4 and EB-NeRD scores in
-the scores-file format. When Anurag's score files land, producing the final numbers is a re-run,
-not new work.
+**Independent check on Q3 claims.** The original split kept the builder and the judge of a model
+apart (`CLAUDE.md` rule 2). With all of P3 on one person that is lost for Q3, so **Anurag reviews
+every Q3 "beats" claim** (the paired CI and the commands that produced it) before it goes into
+`RESULTS.md`.
 
-| When | Aayush builds, against A1 outputs | Ready for |
-|---|---|---|
-| 12–13 Sep | paired bootstrap + its oracle test | P3.2 (starts 15 Sep) |
-| 13–14 Sep | `make eval`: all metrics, both slices, CIs | P2 before/after table, P5 |
-| 14–15 Sep | `make bench` on stage 1 (BM25 + FAISS memory, retrieval latency) | reranker latency added when P2 lands |
-| 14–15 Sep | resumable Kaggle test-inference + submission pipeline | first A2 submission, **Wed 16 Sep** |
+**The handoff is still a scores file per system per split:** `impression_id, article_id, score`
+as Parquet.
+
+- Producers: Anurag's reranker (`config.FINAL`) and Aayush's NRMS and its ablation rows.
+- Consumers: the paired bootstrap (P3), `make eval` and the submission writer (P5).
+- Neither person imports the other's code. Pin this format in `SPEC.md` before the first NRMS
+  scores are written.
+
+**Order of work after C-019.** The reranker is locked, so its score files can be produced now from
+`config.FINAL`. The NRMS score files arrive with P3.1. Harnesses are still built and tested first
+against existing outputs, so when a model's scores land, producing numbers is a re-run and not
+new work.
+
+| When | Who | Builds | Ready for |
+|---|---|---|---|
+| 12–13 Sep | Aayush | paired bootstrap + its oracle test (P3.4a) | P3.2 (starts 15 Sep) |
+| 12–15 Sep | Aayush | NRMS on Kaggle, EB-NeRD demo → both datasets (P3.1) | P3.2–3.4 |
+| 13–14 Sep | Anurag | `make eval`: all metrics, both slices, CIs, on the locked reranker's scores | P5 |
+| 14–15 Sep | Anurag | resumable Kaggle test-inference + submission pipeline for `config.FINAL` | first A2 submission, **Wed 16 Sep** |
+| 14–17 Sep | Aayush | `make bench`: stage 1 + the locked reranker (memory, p99, cost) | P4 |
 
 ---
 
@@ -111,16 +121,16 @@ not new work.
 | Phase | Covers | Window | Owner | Exit gate | Status |
 |---|---|---|---|---|---|
 | **P0** Setup | Part 0 | 11 Sep | Anurag & Aayush | branch + docs; `make test` green on Aayush's clean clone; Kaggle CLI + 2× T4 verified on both accounts; team registered on both Codabench comps; NRMS runs on toy data | ☐ |
-| **P1** Behavioural features | Q1 | 12–13 Sep | Anurag | features in `src/features/`; leakage test covers each one | ☐ |
-| **P2** Two-stage reranker | Q2 | 13–15 Sep | Anurag | before/after-rerank table, both datasets, with CIs | ☐ |
-| **P3.1** Reproduce NRMS | Q3.1 | 12–15 Sep | Anurag | NRMS on both datasets (Kaggle, fp16); our number vs the published one; score files written | ☐ |
-| **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | Aayush | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 | ☐ |
-| **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | Aayush & Anurag | paired 95% CI excludes zero, or an honest null | ☐ |
+| **P1** Behavioural features | Q1 | 12–13 Sep | Anurag | features in `src/features/`; leakage test covers each one | ☑ done 11 Sep |
+| **P2** Two-stage reranker | Q2 | 13–15 Sep | Anurag | before/after-rerank table, both datasets, with CIs | ☑ locked 11 Sep (C-018); D1 framing (b) open |
+| **P3.1** Reproduce NRMS | Q3.1 | 12–15 Sep | **Aayush** | NRMS on both datasets (Kaggle, fp16); our number vs the published one; score files written | ☐ |
+| **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☐ |
+| **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☐ |
 | **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☐ |
-| **P5** Extended eval + submit | Q5 | 13–18 Sep | Aayush | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
+| **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag & Aayush** | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
 | **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ☐ |
 
-P4 and P5 start early on A1 outputs (§2) and finish once Anurag's score files exist.
+P4 starts early on A1 outputs (§2). P5 can start at once: the reranker is locked in `config.FINAL`.
 
 ---
 
@@ -141,8 +151,8 @@ P4 and P5 start early on A1 outputs (§2) and finish once Anurag's score files e
 6. **Kaggle workflow:** repo code is uploaded as a private Kaggle dataset and run by kernels pushed
    with the `kaggle` CLI (installed via `requirements.txt`, credentials in `~/.kaggle/kaggle.json`).
    Share the datasets between Anurag's and Aayush's accounts. Each account has its own GPU quota:
-   Anurag's goes to NRMS training, Aayush's to test inference and benchmarks.
-7. **NRMS smoke test (Anurag):** clone `ebnerd-benchmark` into `external/` (gitignored, commit
+   Aayush's goes to NRMS training (P3), and Anurag's to the P5 test-set inference runs (C-019).
+7. **NRMS smoke test (Aayush, C-019):** clone `ebnerd-benchmark` into `external/` (gitignored, commit
    hash pinned in `CONTEXT.md`), check which framework it uses, and run NRMS on EB-NeRD demo on a
    Kaggle T4 with fp16. This settles D3 below. It is the riskiest unknown and must surface on day 1.
 8. Pin the scores-file format (§2) in `SPEC.md` (both agree it, since it is the handoff contract).
@@ -202,17 +212,17 @@ definition, so the "with vs without" ablation row comes from a flag and not from
 
 ## Phase 3 — Baseline reproduced, then beaten (Q3)
 
-### P3.1 · Reproduce · **12–15 Sep · Anurag** (Kaggle 2× T4, fp16)
+### P3.1 · Reproduce · **12–15 Sep · Aayush** (Kaggle 2× T4, fp16)
 
 1. NRMS from `ebnerd-benchmark` on EB-NeRD, and the same model on MIND (D3).
 2. "Reproduced" means *our* number next to the *published* number, with the gap explained. It
    does not have to match exactly, but the gap must be stated and reasoned about.
 3. Output: a scores file (§2) for validation and test, on both datasets.
 
-### P3.2–3.4 · Improve and ablate · **15–17 Sep · Aayush & Anurag**
+### P3.2–3.4 · Improve and ablate · **15–17 Sep · Aayush**
 
-The modelling change and ablation runs are joint; Aayush drives the paired bootstrap CI harness
-(built 12–14 Sep as P3.4a) and signs off on every "beats" claim.
+Aayush owns the change, the ablation runs and the paired bootstrap CI harness (P3.4a, 12–14 Sep).
+Anurag reviews every "beats" claim before it is recorded (C-019).
 
 1. **One** principled change (D4), chosen from what A1 measured. On EB-NeRD, recency dominated
    and popularity barely mattered (A1 Q9c). Recency-weighted pooling won on EB-NeRD and lost on
@@ -241,7 +251,7 @@ The modelling change and ablation runs are joint; Aayush drives the paired boots
 
 ---
 
-## Phase 5 — Extended eval + submissions (Q5) · **13–18 Sep · Aayush**
+## Phase 5 — Extended eval + submissions (Q5) · **13–18 Sep · Anurag & Aayush**
 
 1. `make eval`: all metrics (AUC, MRR, nDCG@5, nDCG@10, diversity, novelty, coverage) for the full
    two-stage pipeline, with bootstrap CIs.

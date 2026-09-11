@@ -689,3 +689,197 @@ than by memory:
 
 The session `<=` bug does **not** fail the append-the-future test, correctly: `<=` still excludes
 events strictly after t. It is the tie test that catches it, which is why both tests exist.
+
+### 11.8 · Freshness (Q1.3): `freshness_hours`
+
+`freshness_batch(first_known, requests, *, untimed_ts=None) -> pl.DataFrame`
+
+**Definition.** One definition covers both datasets: how long before *t* the article was first
+known to exist.
+
+```
+first_seen(a, t)   = min { ts : (a, ts) ∈ first_known,  ts < t }        (strict)
+freshness_hours    = (t − first_seen(a, t)) / 1 h ,   NaN if no such ts
+```
+
+The first-known times come from different sources:
+
+| Dataset | `first_known` rows | Meaning |
+|---|---|---|
+| EB-NeRD | one per article, `ts = published_time` (`articles.parquet`, 0 nulls in 125,541) | publication age |
+| MIND | one per candidate appearance in any impression, `ts` = impression time; plus history articles stamped with `untimed_ts` | first-seen proxy, because MIND has no publish time |
+
+**Why a single group-by is enough.** The minimum over sightings strictly before *t* equals the
+overall minimum sighting whenever that minimum is before *t*, and is empty otherwise. So the
+feature is: the overall first sighting per article, then a strict comparison with *t*. There is no
+pair table, and the cost is linear in sightings + requests.
+
+**The boundary, and two consequences:**
+
+- **A sighting at exactly *t* does not count.** On MIND, the current impression contains its own
+  candidates. If that counted, every candidate would be "first seen" at *t* with freshness 0,
+  which says nothing about age.
+- **EB-NeRD: a `published_time` ≥ *t* gives NaN, not a negative age.** An article cannot be shown
+  before it exists, so a recorded publish time after the impression is a later rewrite of the
+  metadata, and using it would leak that rewrite. The fraction of such requests is measured and
+  reported by the reranker script.
+- **MIND history articles.** Clicks in the frozen history (C-008) prove an article existed before
+  the dataset's first impression. They are stamped with `untimed_ts`; the reranker uses the first
+  day of `MINDsmall_train`, 2019-11-09 00:00.
+
+**Missing values and invalid input:** NaN when nothing qualifies; a null `ts` without
+`untimed_ts` raises `ValueError` (same rule as §11.1). `serving_ok = True`: publish times and
+earlier impressions are both known at request time.
+
+**Test-file availability.** EB-NeRD `published_time` ships with the test bundle's articles. The
+MIND test impressions' candidate lists are unlabelled but present, so first sightings within the
+test file are available too.
+
+**Verification** (`tests/test_freshness.py`)
+
+| Case | Asserted |
+|---|---|
+| publish time T − 5 h | 5.0 h at T; 1.0 h at T − 4 h; NaN at T − 6 h |
+| publish time exactly T, or T + 1 h | NaN (not strictly before t) |
+| article unknown to `first_known` | NaN |
+| sightings at T − 10 h, T − 2 h, T + 1 h | 10.0 h at T; 5.0 h at T − 5 h; NaN at exactly T − 10 h |
+| seen only at exactly T, or only after T | NaN |
+| history article with null `ts`, `untimed_ts` = T − 48 h | 48.0 h |
+| future sightings appended | no value changes |
+| null `ts` without `untimed_ts` | `ValueError` |
+
+**Mutation check.** A `first_seen <= t` boundary fails 3 of 8 tests.
+
+---
+
+## 12 · A2 Phase 2 — Two-stage reranker (Q2), first measured version
+
+`scripts/rerank_ebnerd_a2.py` and `scripts/rerank_mind_a2.py`, built on `src/rerank/`
+(`common.py`, `ebnerd.py`, `mind.py`). Measured numbers are in `RESULTS.md` Q2.
+
+**Framing (PLAN D1: option (a) here; (b) and (c) still open).** Each impression's own candidates
+are re-ranked, which is what both leaderboards score. Stage 1 is A1's two generators, BM25 over
+the last 5 clicked titles and the embedding cosine of the mean-pooled history vector, used as
+*scores* on those candidates. Re-ranking a retrieved top-K from the whole corpus (option (b)) is
+not in this version.
+
+**Protocol: the shipped temporal split.** Fit on the train period and evaluate on the next one:
+EB-NeRD small train week → validation week; MINDsmall_train → MINDsmall_dev.
+
+- **Sampling.** Impressions are *seeded random samples* within a split (100k fit and 100k
+  evaluation on EB-NeRD; 80k fit and all 73,152 dev impressions on MIND). That is sampling, not
+  splitting, so the temporal boundary is untouched.
+- **Correction of A1.** A1's EB-NeRD reranker fitted and evaluated inside the validation file,
+  split 70/30 by row order. `behaviors.parquet` is **not sorted by time** (measured: `is_sorted`
+  is false for both train and validation), so that was not a temporal split. Its AUC 0.7084 is not
+  comparable, and this version replaces the protocol (CONTEXT.md C-015).
+- **Popularity counts** (`pop_total`, `ctr_total`) come from train events only. Train rows see
+  point-in-time counts; evaluation rows see counts that stop at the split boundary, as test rows
+  would. The windowed counts are dropped, as A1 v4 did (§7).
+
+**Feature sets.** Every list passes through `src/rerank/common.model_features`, which removes
+`UNSAFE_FEATURES` and `ABSENT_FROM_TEST_FILE`. Both scripts assert the result.
+
+| Set | EB-NeRD | MIND |
+|---|---|---|
+| base (A1) | bm25, semantic (word2vec), pop_total, ctr_total, freshness_hours, n_candidates, history_len | bm25, semantic (MiniLM), pop_total, ctr_total, n_candidates, cat_affinity, history_len |
+| A2 = base + | recency_weighted_profile, category_match, cand_position, session_pos, hist_read_time_mean, hist_scroll_mean | category_match, cand_position, freshness_hours |
+| computed but excluded | n_prior_clicks_in_session (absent from test file), session_len, cur_read_time, cur_scroll_percentage (unsafe) | — |
+
+- **Freshness in the base set.** On EB-NeRD, `freshness_hours` replaces A1's `age_hours` (same
+  quantity, with §11.8's NaN rules), so the base-vs-A2 difference measures only the *new*
+  features.
+- **No duplicate profile on MIND.** `recency_weighted_profile` equals A1's `cat_affinity` there
+  (C-008), so it is not added twice. The script asserts that the two agree to within 1e-9 on
+  every row with history.
+
+**Models.** Both use the same capacity (300 trees, learning rate 0.08, 31 leaves, seed 0), so
+comparing them compares objectives, not model size. Both handle NaN features natively.
+
+| | Pointwise (A1) | Listwise (PLAN D2, CONTEXT.md C-016) |
+|---|---|---|
+| Model | sklearn `HistGradientBoostingClassifier` | LightGBM 4.7.0 `LGBMRanker(objective="lambdarank")` |
+| Loss | log-loss per candidate row, all impressions pooled | pairwise swaps *within* one impression, weighted by their nDCG change |
+| Rewards | any feature that separates impressions (e.g. slate size) | only features that order candidates inside an impression |
+| Grouping | none | one query per impression: `group_sizes(frame)` = contiguous run lengths of `imp_row` |
+| Determinism | seeded | `deterministic=True`, `force_row_wise=True`, `n_jobs=4`: refits are bit-identical (tested) |
+
+- **Grouping key.** It is `imp_row`, not `impression_id`, because the EB-NeRD test file repeats
+  `impression_id` 0 across 200,000 rows. Frames are sorted by (`imp_row`, `cand_position`), and
+  `group_sizes` raises if any impression's rows are not contiguous. LightGBM reads groups as
+  consecutive counts, so a split impression would otherwise become two queries without any error.
+- **Scores.** The ranker outputs unnormalised scores. That is fine here, because every metric is
+  computed within an impression.
+
+**Conditional ablation (leave one Phase 1 family out, lambdarank).** The trigger is fixed in code
+before the numbers are seen (`common.drop_reasons`): it fires if the paired Δ(A2 − base) has an
+AUC point estimate below 0, *or* any metric's 95% CI entirely below 0.
+
+- **When it fires,** the model is refitted once per family with that family's columns removed.
+  Each refit is reported as (without − with) and (without − base).
+- **Reading it:** a positive (without − with) whose CI excludes 0 means the family costs
+  performance.
+- **Families:**
+  - EB-NeRD: category profile {`recency_weighted_profile`, `category_match`}, list position
+    {`cand_position`}, session {`session_pos`}, dwell {`hist_read_time_mean`, `hist_scroll_mean`};
+  - MIND: {`category_match`}, {`cand_position`}, {`freshness_hours`}.
+
+**Half-life.** h = ∞, from the P1-D2 grid (CONTEXT.md C-014). The EB-NeRD script also fits the A2
+model with h = 72 h, to test that choice inside the full model.
+
+**Evaluation.**
+
+- **Metrics:** A1's per-impression AUC, MRR, nDCG@5 and nDCG@10, each with a bootstrap 95% CI
+  (1,000 resamples of impressions).
+- **Differences:** `src/rerank/common.paired_delta`, a paired bootstrap over the same
+  impressions, provisional until P3.4a.
+- **Importance:** permutation importance (pooled ROC-AUC) for the A2 model.
+
+**Test-file check.** Both scripts run the full feature pipeline on the first 5,000 impressions of
+the unlabelled Codabench test file:
+
+- no `label` column appears, and EB-NeRD produces no `n_prior_clicks_in_session`;
+- the A2 model scores every row with finite values.
+
+This proves the pipeline runs without click columns. It is not a submission.
+
+### 12.1 · The locked configuration (CONTEXT.md C-018)
+
+`src/rerank/config.FINAL` is the single source of truth for what ships. The Q5 submission runs
+read it, and both reranker scripts assert that it equals the model they measured.
+
+| | EB-NeRD | MIND |
+|---|---|---|
+| Objective | lambdarank (`fit_final` → `fit_lambdarank`) | pointwise (`fit_final` → `fit_gbdt`) |
+| Features | A1 base (7) + `recency_weighted_profile`, `category_match`, `cand_position`, `session_pos` = **11** | A1 v4 base, **7** |
+| Left out, with reason | `hist_read_time_mean`, `hist_scroll_mean`: they hurt the listwise model, confirmed on a 144,647-impression holdout | every Phase 1 addition: none beat the base under either objective |
+| Evidence | `RESULTS.md` Q2, follow-up 2 | `RESULTS.md` Q2, follow-up 1 |
+
+`tests/test_rerank_config.py` pins the invariants:
+
+- no final feature is unsafe or absent from the test file;
+- EB-NeRD keeps the category profile and has no dwell;
+- MIND is exactly A1 v4;
+- `fit_final` dispatches on the objective.
+
+**Still open against the brief:** Q2.1 asks for A1's generators to *retrieve* the top K
+(100–200) from the corpus before re-ranking, which is PLAN D1 framing (b). This configuration
+re-ranks each impression's own candidates (framing (a)), which is what the leaderboards score.
+Framing (b) remains to be built and measured.
+
+**Verification of the frame builders** (`tests/test_rerank_*.py`):
+
+- EB-NeRD labels map by clicked-id membership: a duplicated click id counts once, and duplicate
+  `impression_id`s stay distinct rows.
+- MIND labels map by position.
+- Unlabelled splits carry no label column.
+- `model_features` drops exactly the banned columns.
+- `paired_delta` returns exactly 0 for a system against itself, and recovers a constant shift
+  with a zero-width CI.
+- **Lambdarank:**
+  - `group_sizes` returns contiguous runs and rejects interleaved rows;
+  - `fit_lambdarank` rejects group sizes that do not cover every row;
+  - two fits are bit-identical;
+  - on a toy where one feature separates impressions and another decides the click inside them,
+    the ranker puts the clicked candidate first in ≥ 95% of impressions.
+- **The ablation trigger** (`drop_reasons`) is tested on its three cases.
