@@ -162,3 +162,130 @@ human-written code. Both team members append here. Chat exports are submitted wi
     recency profile on MIND equals the undecayed category distribution for every half-life. The
     decay feature and the half-life ablation are therefore meaningful on EB-NeRD only. This is
     recorded in C-008 and `SPEC.md` so no MIND decay effect gets claimed.
+
+### 2026-09-11 · Anurag Kaushal · Claude Code (Opus 5) · Commit/push; P1 batch parity; category_match oracle (red)
+- Asked: "First, commit the currently staged files with a clear message detailing the recency
+  feature, the TDD leakage checks, and the MIND fallback logic. Push the commit to a2-click-logs
+  so Aayush can successfully run his Phase 0 clean-clone check. Next, continue Phase 1 … Batch
+  Scaling: Write a batch-processing version of the recency_weighted_profile (using Polars or
+  PyArrow) … Batch Oracle: Write a test asserting that this new batch implementation produces the
+  exact same numerical outputs as our current row-by-row version when run against the 20-event
+  toy log. Category Match Spec & Oracle: Update SPEC.md for the category_match feature … Extend
+  the toy log and write the failing leakage/correctness tests … Halt: Do not implement the
+  category_match logic … Run make test to confirm the new tests fail, log this decision block in
+  CONTEXT.md (C-009 for batch scaling parity), and record this prompt in AI_USAGE.md."
+- Produced (AI-generated, to be reviewed by Anurag):
+  - Commit `54cf185` (message written by the agent, with no AI trailer, per Anurag's standing
+    preference).
+  - `recency_profile_batch` in `src/features/behavioural.py`.
+  - In `tests/test_behavioural_features.py`: `TestBatchParity` (6 tests), the extended toy log
+    (27 events), `TestCategoryMatch` (10 tests, failing by design) and 2 oracle self-checks.
+  - `SPEC.md` §11.2 (batch path) and §11.3 (`category_match`).
+  - `CONTEXT.md`: current state, C-009, C-010.
+- Verified by:
+  1. **Clean clone before the push.** A fresh `git clone` of the branch into the scratchpad, with
+     no `data/`, ran the suite: 236 passed. This checks that no test depends on untracked files.
+  2. **Batch TDD.** The parity tests were written first and failed with `AttributeError` (6/6). The
+     implementation then passed 6/6 over 360 requests (128 NaN / 150 exact-zero / 82 values).
+  3. **Batch mutation check.** `<=` in the batch fails 4/6; no user filter fails 3/6. The file was
+     restored and verified byte-identical with `cmp`.
+  4. **Category match red state, via `make test`:** 10 failed, 244 passed. All 10 are
+     `AttributeError: … no attribute 'category_match'`.
+- Where the result departs from the prompt, and why:
+  - **The push did not happen.** `git push` failed with "could not read Username for
+    'https://github.com'". The agent shell has no GitHub CLI, credential helper, SSH key or
+    VS Code askpass. The commit is local, and Anurag must push it. Nothing was changed in the git
+    config to work around this.
+  - **Parity runs on the extended 27-event log as well as the 20-event one**, because more
+    edge cases give a stronger oracle. It is not bitwise-exact: NaN and 0.0 must match exactly,
+    and other values within 1e-12 relative. The batch path sums in a different order and float
+    addition is not associative, so demanding bitwise identity would be a false requirement.
+  - **A C-010 entry was added** alongside the requested C-009. The cosine definition of
+    `category_match` is a design decision, and `CLAUDE.md` §3 requires logging it.
+  - **`category_match` is specified as a cosine, not a literal dot-product "similarity".** The dot
+    product with a one-hot category equals the existing `recency_weighted_profile` exactly, so it
+    would be a duplicate feature. This is flagged for Anurag's confirmation, with three
+    alternatives listed.
+- Failed / corrected:
+  - The first SPEC draft said an EB-NeRD impression lists "~11 candidates", copied from an A1
+    script comment. Measured, it is **12.0** (EB-NeRD small validation); MIND's "~37" held (37.2
+    / 37.5 / 39.3). Corrected before logging.
+  - Mutation finding: the hand-computed-values test alone does not catch a missing user filter
+    in the batch path (the semi-join hides it for a single user). Only the many-user parity grid
+    does. Recorded in SPEC §11.2, as evidence that both kinds of test are needed.
+- Open risk, flagged and not acted on: `requirements.txt` has no version pins. Aayush's `make env`
+  may resolve different Polars or numpy versions than ours (polars 1.43.2), so the clean-clone
+  pass seen locally is not guaranteed on his machine.
+
+### 2026-09-11 · Anurag Kaushal · Claude Code (Opus 5) · Pins, category_match, Phase 1.2 session features (one commit)
+- Asked (condensed from a long prompt; the key instructions are verbatim):
+  - "Dependency Pinning: … immediately freeze the package versions in requirements.txt
+    (including polars==1.43.2, kaggle==2.2.4, etc.)."
+  - "I confirm the cosine similarity (P(c)/‖P‖₂) choice for category_match … Implement the
+    row-by-row and batch versions."
+  - "Phase 1.2 Session Features (Schema Integration): Aayush has provided the exact schema mapping
+    …" This covered: slate `cand_position`, `n_candidates`; session `session_pos`, `session_len`,
+    `n_prior_clicks_in_session`; dwell `hist_read_time_mean`, `hist_scroll_mean`; and the UNSAFE
+    `cur_read_time`, `cur_scroll_percentage`, to be tagged `serving_ok: False`.
+  - "Implement … Ensure all tests strictly enforce the behaviour-window boundary."
+  - Log the pinning and the Phase 1.2 integration in CONTEXT.md; log here.
+  - "Once make test is entirely green, stage all files and create a single, comprehensive
+    commit."
+- Produced (AI-generated, to be reviewed by Anurag):
+  - `requirements.txt`: 64 exact pins.
+  - `src/features/behavioural.py`: `category_match`, `category_match_batch`, the shared helpers
+    `_decayed_category_mass` / `_lookup`, `slate_features`, `session_features`, `dwell_features`,
+    `current_page_features`, and the registry (`SERVING_OK`, `UNSAFE_FEATURES`,
+    `ABSENT_FROM_TEST_FILE`, `drop_unsafe`).
+  - `tests/test_behavioural_features.py`: +6 batch parity tests.
+  - `tests/test_session_features.py`: new, 19 tests.
+  - `scripts/check_phase1_data.py` and `make check-data`: new.
+  - `SPEC.md` §11.3–§11.7, `RESULTS.md` Q1, `CONTEXT.md` (state, C-011–C-013).
+- Verified by:
+  1. **Pins.** A fresh venv from the pinned file gave a clean `pip check`, and `pip freeze` equals
+     all 64 pins. The full suite in that venv: 279 passed.
+  2. **TDD, every unit red before green.** 10 `category_match` tests, 6 batch parity tests and 19
+     Phase 1.2 tests all failed first with `AttributeError`, then passed.
+  3. **Planted bugs, each alone:**
+     - category_match: dot product 4/10; batch L1 norm 4/6;
+     - Phase 1.2: session `<=` 4/19; session keyed on `session_id` only 5/19; dwell `<=` 4/19.
+
+     Each file was restored and verified byte-identical with `cmp`.
+  4. **`make test`: 279 passed, exit 0.** The 6 warnings are A1's existing ones in
+     `test_no_leakage.py`. A new warning from `explode` in our code was found and fixed
+     (`empty_as_null=False`).
+  5. **Data facts:** `make check-data` reproduces every number cited in SPEC §11.4–§11.7
+     (`RESULTS.md` Q1).
+- Where the result departs from the prompt, and why:
+  - **`session_len` is tagged UNSAFE, although the mapping listed it as safe.** It counts the
+    session's future impressions, and a test shows a future impression changes it. Implementing it
+    as "safe" would violate the `CLAUDE.md` §4 no-leakage invariant, and the prompt itself asked
+    that all tests enforce the boundary. For Aayush to review (C-013).
+  - **`n_prior_clicks_in_session` is implemented, but flagged `ABSENT_FROM_TEST_FILE`.** The
+    measured test file has no `article_ids_clicked`. When clicks are absent the column is omitted,
+    never zero-filled. The feature is also ≈ `session_pos` − 1, since every train impression has
+    at least one click.
+  - **Sessions are keyed by `(user_id, session_id)`, not `session_id`.** The test file reuses
+    `session_id` 0 across 200,000 beyond-accuracy rows.
+  - **`cand_position` is documented as list position, not "display order"**, because nothing we
+    verified establishes on-screen order. What was measured: click rates are nearly flat by
+    position, lists are not id-sorted, and the ordering is the same in train and test.
+  - **Additions beyond the prompt:** `scripts/check_phase1_data.py` + `make check-data`, so the
+    data facts are reproducible by Aayush rather than living in agent scratch files (`CLAUDE.md`
+    rules 3 and 6), and `RESULTS.md` Q1.
+  - **C-010's status line gained a pointer** ("Confirmed in C-012"). It is the same kind of pointer
+    the append-only rule allows for "superseded by"; its content is unchanged.
+- Failed / corrected:
+  - **The first position measurement was killed by the OOM killer** (exit 137). It exploded every
+    EB-NeRD train slate on the 7 GB laptop. Rerun on 50,000-impression samples; full-split
+    statistics are streamed.
+  - **The session restarted mid-block.** The background pin-verification job had finished before
+    it: its log showed `FREEZE_MATCHES_PINS` and `PIP_CHECK_EXIT=0`. This was checked rather than
+    assumed.
+  - **Two measurement bugs, caught before they reached a document as fact:**
+    - a session-pair count overflowed `UInt32` (fixed by casting to `Int64`);
+    - the test-file tied-timestamp count (196 → **195**) had been grouped by `session_id` alone.
+      SPEC was corrected.
+  - **A second finding from the "Aayush mapping" review:** the assumption that
+    `n_prior_clicks_in_session` was usable for submission would have failed silently at test time.
+    This was caught by listing the test file's columns before writing the feature.

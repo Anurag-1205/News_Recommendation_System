@@ -21,13 +21,13 @@ _Last updated: 2026-09-11 by Anurag (agent: Claude Code)_
 | | |
 |---|---|
 | Branch | `a2-click-logs`, from `main` at `be15ee6` (A1 final) |
-| Phase | **P1 Behavioural features started** (Anurag). P0 setup committed (`779cad4`); the P0 exit-gate items owned by Aayush are still open. See `PLAN.md` §3 |
+| Phase | **P1 Behavioural features, mostly built** (Anurag). Done: recency profile, category match (reference + batch), slate, session, dwell, the unsafe registry. Left: freshness (`published_time` / MIND first-seen), click count, and the half-life choice (P1-D2). P0 exit-gate items owned by Aayush are still open. See `PLAN.md` §3 |
 | Team | **Anurag Kaushal**: modelling (P1, P2, P3.1). **Aayush Pandey**: measurement (P3.4a paired bootstrap, P4, P5). Joint: P0, P3.2–3.4, P6. Final (C-005) |
-| Anurag Kaushal | done: branch, docs, Kaggle CLI (C-001–C-004). **P1, feature 1 of ~6 done:** `recency_weighted_profile` in `src/features/behavioural.py`, with the MIND fallback. Mutation-checked (C-007), P1-D1 decided (C-008), `make test` green at 236. Next P1 unit: the decayed category profile's siblings (click count, category match, session, dwell, position, freshness; `PLAN.md` P1 table), then the batch path that computes features for millions of impressions and must match the reference on the toy log. Still owed from P0: NRMS smoke test on Kaggle (PLAN P0.7) |
+| Anurag Kaushal | Commits `54cf185` (recency) and the P1-block commit that follows it (C-009, C-011–C-013; **279 green**) are local, and **neither is pushed yet**: the agent shell has no GitHub credentials, so Anurag pushes both. Next P1 units: freshness, then running the h grid on EB-NeRD through the batch path to settle P1-D2. Still owed from P0: NRMS smoke test on Kaggle (PLAN P0.7) |
 | Aayush Pandey | not started. Now: P0 clean-clone check (`make env && make test`) and Kaggle verification on Aayush's account (PLAN P0.2–P0.3). Next: P3.4a paired bootstrap harness (12–14 Sep) |
 | Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004) |
 | Blocked on | team decisions D1–D9 in `PLAN.md` §5; the scores-file format (`PLAN.md` §2) must be agreed and pinned in `SPEC.md` |
-| Next up | Anurag: next P1 feature; choose h (P1-D2) once the batch path can run the grid on EB-NeRD. Aayush: P0 clean-clone check. `make test` is **green (236 passed)**, so pushing is safe |
+| Next up | **Aayush:** once Anurag pushes, `git pull` and run `make env && make test`. With the pins (C-011), a fresh venv from `requirements.txt` gave 279 passed on this machine, and `make check-data` re-derives every data fact behind C-013. Please review C-013's two corrections to your schema mapping (`session_len` unsafe; `n_prior_clicks_in_session` absent from the test file). **Both:** the submission model must exclude `UNSAFE_FEATURES` and `ABSENT_FROM_TEST_FILE` (`src/features/behavioural.py`) |
 
 ---
 
@@ -266,6 +266,196 @@ Entry format:
 - Affects: `src/features/behavioural.py` (`untimed_ts`), `SPEC.md` §11.1 (P1-D1/P1-D2 rewritten
   with the measurements), `tests/test_behavioural_features.py` (`TestMindUntimedFallback`)
 - Status: active
+
+### C-009 · Batch scaling: `recency_profile_batch`, held to the row-by-row reference by a parity oracle
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code)
+- Decision:
+  - Feature values for Kaggle-scale runs come from `recency_profile_batch(log, requests,
+    half_life, *, untimed_ts=None)`, one vectorised Polars pass over a frame of
+    `(user_id, t, candidate_category)` requests.
+  - The row-by-row `recency_weighted_profile` stays as the readable definition and **is the
+    oracle**. The batch path must reproduce it on every request.
+  - "Same output" means NaN ↔ NaN and 0.0 ↔ 0.0 exactly, and all other values within 1e-12
+    relative. It is not bitwise, because float addition is not associative and the batch path sums
+    in a different order.
+- Algorithm (`SPEC.md` §11.2):
+  - distinct (user, t) anchors, so one profile per impression rather than per candidate;
+  - an equi-join to that user's events, then the strict `ts < t` filter per anchor;
+  - sums per (anchor, category) and per anchor;
+  - a left-join lookup of each candidate's category.
+
+  Row order and passthrough columns are preserved.
+- Why this design: it is the same arithmetic as the reference, so it is explainable line for line,
+  and it avoids per-row Python.
+  - **Cost:** memory is linear in Σ over anchors of history length. The Kaggle driver streams
+    `requests` one chunk (Parquet row group) at a time to cap it.
+  - **Rejected for now:** per-user prefix sums with an as-of lookup at `t`. It is asymptotically
+    cheaper (linear in events + requests, no pair table), but subtler (duplicate timestamps,
+    as-of strictness). Adopt it only if the measured cost demands it (`CLAUDE.md` rule 3: find the
+    bottleneck, don't guess it).
+- Evidence (TDD order kept):
+  1. **Red.** The 6 parity tests were written first and failed with
+     `AttributeError: … no attribute 'recency_profile_batch'`.
+  2. **Green.** After implementing, 6/6 pass. The grid is **360 requests** over both toy logs (128
+     NaN, 150 exact-zero and 82 non-zero reference values). It includes scoring times equal to
+     event timestamps, the MIND fallback, shuffled requests with a passthrough column, and the
+     reference's `ValueError` cases. One test also pins the batch to the hand-computed U1 values.
+  3. **Mutation.** Planted in the batch path alone: `ts <= t` fails 4/6; a cross join with no user
+     filter fails 3/6. The hand-computed-values test alone misses the second bug, because the
+     upstream semi-join narrows a single-user request to that user. The many-user parity grid
+     catches it. Logs: scratchpad `batch_mutants.log`; the file was restored and verified
+     byte-identical.
+- **Not yet measured:** throughput and peak memory on real data. The "millions of rows" claim is a
+  design property, with a stated cost model, until the Kaggle driver runs it on EB-NeRD. The
+  numbers then go to `RESULTS.md` Q1 with the command. Measured in passing, for the cost model:
+  mean candidates per impression is 12.0 on EB-NeRD small validation and 37.2 / 37.5 / 39.3 on
+  MIND small train / small dev / large test. That is the per-candidate work the anchor
+  deduplication avoids.
+- Affects: `src/features/behavioural.py` (+`recency_profile_batch`), `tests/test_behavioural_features.py`
+  (`TestBatchParity`, `_requests`, `_assert_same`), `SPEC.md` §11.2
+- Status: active
+
+### C-010 · `category_match` defined as a cosine (specified and oracle written; not implemented)
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code). **The definition is pending
+  Anurag's confirmation.**
+- Decision: `category_match(user, candidate, t) = cos(P, e_c) = P(c) / ‖P‖₂`.
+  - P is the recency-weighted category profile (§11.1), and e_c is the candidate category's
+    one-hot vector.
+  - Everything else is shared with §11.1: boundary, decay, `untimed_ts`, 0.0 / NaN rules and
+    `ValueError` cases.
+  - Oracle: the toy log is extended 20 → 27 events (U4, U5), with the original 20 rows untouched.
+  - The code is **deliberately not written.**
+- Why cosine: the dot product P · e_c equals P(c), which *is* `recency_weighted_profile`, so it
+  would give the reranker a duplicate column. Cosine adds exactly one piece of information: profile
+  concentration, via ‖P‖₂. It is 1.0 when c is the user's only recent category and 1/√k across k
+  equal categories.
+- Honest caveat: that is a thin addition. A GBDT given P(c) and a concentration feature could learn
+  it. Alternatives, if Anurag prefers:
+  - a top-1-category indicator;
+  - lift over a point-in-time population prior, P(c) / P_all(c);
+  - a subcategory-level match (both datasets carry subcategories).
+- Oracle (hand-computed, literals self-checked):
+  - **U1:** sports 0.9030165, politics 0.1736579, tech 0.3929429. The literals come from the raw
+    masses W, and the oracle recomputes them from the normalised P to show scale invariance.
+  - **U4, only science eligible:** 1.0. A leaked at-t click would give 0.7287.
+  - **U5, two equal-mass categories at one timestamp:** 1/√2 each. A leaked future click would give
+    0.9589.
+  - **Also:** exact 0.0 for categories seen only at or after t and for other users' categories;
+    NaN for U3; invariance to 5 shuffles; `ValueError` on a null `ts`.
+- Red state, measured: `make test` gives **10 failed, 244 passed** (exit 2). All 10 failures are
+  `AttributeError: module 'src.features.behavioural' has no attribute 'category_match'`. The
+  other 244 pass: 212 from A1, 24 recency, 6 batch parity and 2 new oracle self-checks. Log:
+  scratchpad `make_test_category_red.log`.
+- Affects: `SPEC.md` §11.3, `tests/test_behavioural_features.py` (`_EXTENSION_ROWS`,
+  `toy_log_extended`, `EXPECTED_U1_CATEGORY_MATCH`, `TestCategoryMatch`, 2 oracle self-checks)
+- Status: active, **pending Anurag's confirmation of the cosine definition**. Confirmed in C-012.
+
+### C-011 · `requirements.txt` pinned to the full dependency closure
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code)
+- Decision: every package `make env` installs is pinned with `==` to the version on the machine
+  where the suite is green. That is 11 direct dependencies (polars 1.43.2, pyarrow 25.0.1, numpy
+  2.5.2, scikit-learn 1.9.0, faiss-cpu 1.15.0, rank-bm25 0.2.2, pytest 9.1.1, tqdm 4.70.0,
+  matplotlib 3.11.1, huggingface_hub[cli] 1.28.0, kaggle 2.2.4) plus their **53 transitive**
+  dependencies, 64 in all, on Python 3.12.3. `requirements-embed.txt` is deliberately left
+  unpinned.
+- Why:
+  - Unpinned, Aayush's `make env` could resolve different versions, so "green here" would not
+    mean "green there".
+  - Pinning only the direct dependencies still lets scipy, pyarrow's dependencies and the rest
+    float. The closure was computed from installed metadata, walking every requirement with its
+    markers and extras.
+  - `requirements-embed.txt` stays unpinned because the local torch is `2.13.0+cpu`, which PyPI
+    cannot serve, and Kaggle's GPU image supplies its own CUDA torch.
+- Evidence:
+  - A **fresh venv** built only from the pinned file (scratchpad `venv_pinned`) installed cleanly.
+    `pip check` found no broken requirements, and `pip freeze` equals all 64 pins exactly.
+  - The full suite in that venv: **279 passed** (log: scratchpad `pinned_venv_tests.log`).
+  - `make test` in the project venv also refreshed it against the pins: 279 passed.
+- To change a version: edit the pin, rebuild a fresh venv, run `make test`, and log it here.
+- Affects: `requirements.txt`
+- Status: active
+
+### C-012 · C-010 confirmed; `category_match` implemented (row-by-row and batch)
+- Date / author: 2026-09-11 · decision by Anurag Kaushal; code by Claude Code
+- Decision: Anurag confirmed the cosine definition: "It properly captures user interest
+  concentration." It is implemented as `category_match` (reference) and `category_match_batch`.
+  - Both batch features now share two private helpers: `_decayed_category_mass` (anchors, strict
+    boundary, decayed mass per category) and `_lookup` (join back, NaN for no history, order kept).
+  - Refactoring `recency_profile_batch` onto them was guarded by its existing parity tests, which
+    still pass unchanged.
+- Evidence:
+  - The 10 C-010 tests went red → green.
+  - `TestCategoryMatchBatchParity` was written first: 6 red (`AttributeError`) → green. It covers
+    the same 360-request grid, hand values (U1, U4 = 1.0, U5 = 1/√2), the MIND fallback, and
+    order/passthrough.
+  - **Planted bugs:**
+    - a dot product P(c) instead of the cosine, in the reference: 4/10 fail (U4 correctly passes,
+      since cosine = dot = 1 for a single-category user);
+    - an L1 sum instead of the L2 norm, in the batch: 4/6 fail.
+
+    Logs: scratchpad `category_match_mutant.log`.
+- Cost note: each batch function makes its own pass, so computing both costs two pair-joins. A
+  combined pass is an easy later change if the Kaggle measurement shows the join dominates.
+- Affects: `src/features/behavioural.py`, `tests/test_behavioural_features.py`, `SPEC.md` §11.3
+- Status: active
+
+### C-013 · Phase 1.2 schema integration: slate, session and dwell features, and the unsafe registry, with two corrections to the mapping
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code), from **Aayush Pandey's schema mapping**
+- Decision: implemented in `src/features/behavioural.py` per `SPEC.md` §11.4–§11.7:
+  - `slate_features`: `cand_position`, `n_candidates`; MIND and EB-NeRD.
+  - `session_features`: `session_pos`, `n_prior_clicks_in_session`, `session_len`; EB-NeRD.
+  - `dwell_features`: `hist_read_time_mean`, `hist_scroll_mean`; EB-NeRD, from history strictly
+    before t.
+  - `current_page_features`: `cur_read_time`, `cur_scroll_percentage`; EB-NeRD, **unsafe**.
+  - The feature registry: `SERVING_OK` (all 11 features), `UNSAFE_FEATURES`,
+    `ABSENT_FROM_TEST_FILE` and `drop_unsafe()`.
+- **Correction 1: `session_len` is serving-unsafe, not safe.** It counts the session's impressions
+  after t: no live system knows how long a session will last. A test proves it: appending a future
+  impression changes `session_len` from 6 to 7 while no safe feature moves. It is in
+  `UNSAFE_FEATURES` with `cur_read_time` and `cur_scroll_percentage`. The safe "length so far" is
+  `session_pos` − 1.
+- **Correction 2: `n_prior_clicks_in_session` cannot feed the submission model.**
+  - It is serving-safe in production, but the EB-NeRD **Codabench test file has no
+    `article_ids_clicked`** (nor `article_id`, `next_read_time` or `next_scroll_percentage`).
+    Training on it would recreate the A1 submission-3 skew.
+  - It is in `ABSENT_FROM_TEST_FILE`, and when `clicked` is absent the column is **omitted, not
+    zero-filled**.
+  - It is also nearly redundant: every EB-NeRD small-train impression has at least one click (0
+    without, mean 1.006), so it is ≈ `session_pos` − 1.
+- **Design fact: sessions are keyed by `(user_id, session_id)`.** The test file gives all 200,000
+  `is_beyond_accuracy` rows `session_id` 0 (and `impression_id` 0). Keyed on `session_id` alone,
+  that is a 200,000-impression "session": a ~4×10¹⁰-pair self-join. Keyed properly, the largest
+  test session is 118 impressions, and the whole file needs 47.3M pairs.
+- `cand_position`, measured:
+  - Click rate is nearly flat across list-position quintiles (EB-NeRD 0.080–0.094, MIND
+    0.036–0.045), so the order is **not a label artifact**.
+  - EB-NeRD lists are not id-sorted (0.2%, the same in train, validation and test).
+  - There is a weak position effect with the same shape in train and dev.
+  - **Open:** whether list order equals on-screen order is not established, so the feature is
+    documented as list position.
+- Evidence:
+  - Oracles first: `tests/test_session_features.py`, 19 tests, **19 red (`AttributeError`) →
+    19 green**.
+  - The central leakage check is "append the future, nothing safe changes", plus the tie at
+    exactly t.
+  - **Planted bugs:**
+    - session `<=`: 4/19 fail;
+    - session keyed on `session_id` only: 5/19 fail;
+    - dwell `<=`: 4/19 fail.
+  - **Data facts:** `make check-data` (new target, `scripts/check_phase1_data.py`), with output
+    in `RESULTS.md` Q1. Every number in `SPEC.md` §11.4–§11.7 reproduces from it.
+  - One number was corrected on re-derivation: tied-timestamp sessions in test are **195**, not
+    196. The first count grouped by `session_id` alone, so the placeholder session counted too.
+  - A first attempt at the position measurement, which exploded every EB-NeRD train slate, was
+    killed by the OOM killer (exit 137). The script samples 50,000 impressions for per-candidate
+    rates.
+- Consequence for Q2 (the reranker): the model trained **for the Codabench submission** must use
+  `drop_unsafe(...)` and also drop `ABSENT_FROM_TEST_FILE`. The Q9 "with unsafe" row is a separate
+  ablation model.
+- Affects: `src/features/behavioural.py` (registry and 4 functions), `tests/test_session_features.py`
+  (new), `scripts/check_phase1_data.py` (new), `Makefile` (`check-data`), `SPEC.md` §11.4–§11.7,
+  `RESULTS.md` Q1
+- Status: active. **Aayush to review the two corrections.**
 
 ---
 

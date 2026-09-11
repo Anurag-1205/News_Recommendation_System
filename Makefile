@@ -1,4 +1,4 @@
-.PHONY: help env fetch-small fetch-large fetch-mind data test eval bench clean-pyc
+.PHONY: help env fetch-small fetch-large fetch-mind data check-data test eval bench clean-pyc
 .DEFAULT_GOAL := help
 
 VENV := .venv
@@ -27,6 +27,9 @@ fetch-mind: env  ## MIND via HuggingFace — requires `hf auth login` first
 
 data: env  ## rebuild raw -> unified schema -> temporal split -> feature store (Q1)
 	PYTHONPATH=. $(PY) scripts/build_pipeline.py
+
+check-data: env  ## print the data facts behind the Phase 1 feature definitions (RESULTS.md Q1)
+	PYTHONPATH=. $(PY) scripts/check_phase1_data.py
 
 test: env  ## run the test suite, incl. the no-leakage assertion (Q9)
 	PYTHONPATH=. $(VENV)/bin/pytest tests/ -v

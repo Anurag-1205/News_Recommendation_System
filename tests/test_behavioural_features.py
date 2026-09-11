@@ -64,6 +64,24 @@ def toy_log() -> pl.DataFrame:
     return pl.DataFrame(_ROWS, schema=["user_id", "article_id", "category", "ts"], orient="row")
 
 
+# Extension for category_match (SPEC.md §11.3): two more users, seven more events. The original
+# 20 rows are unchanged, so every expected value above still holds.
+_EXTENSION_ROWS = [
+    ("U4", "e01", "science",       _at(hours=-10)),     # U4's only eligible category: cos = 1
+    ("U4", "e02", "science",       _at(hours=-40)),
+    ("U4", "e03", "music",         _at(hours=0)),       # EXACTLY AT T; if leaked, cos(science) -> 0.7287
+    ("U4", "e04", "music",         _at(hours=+2)),      # future
+    ("U5", "f03", "sports",        _at(hours=+6)),      # FUTURE, listed first; if leaked, cos(sports) -> 0.9589
+    ("U5", "f01", "sports",        _at(hours=-24)),     # f01 and f02 share one timestamp,
+    ("U5", "f02", "tech",          _at(hours=-24)),     # so equal weight: cos = 1/sqrt(2) each
+]
+
+
+def toy_log_extended() -> pl.DataFrame:
+    return pl.DataFrame(_ROWS + _EXTENSION_ROWS, schema=["user_id", "article_id", "category", "ts"],
+                        orient="row")
+
+
 # Hand-computed weights for U1 at T, h = 24 h. The six eligible events, sorted by ts ascending
 # (the output order SPEC.md §11.1 fixes).
 EXPECTED_U1_WEIGHTS = {
@@ -83,6 +101,14 @@ EXPECTED_U1_PROFILE = {
     "sports":   0.6144569085048177,     # 1.6249919774953683 / 2.6445987586819157
     "politics": 0.11816537347077631,    # 0.3125             / 2.6445987586819157
     "tech":     0.2673777180244061,     # 0.7071067811865476 / 2.6445987586819157
+}
+
+# category_match = cos(P, one-hot(c)) = W_c / ||W||  (SPEC.md §11.3), using the masses above:
+# ||W|| = sqrt(1.6249919774953683^2 + 0.3125^2 + 0.7071067811865476^2) = 1.799515261653623
+EXPECTED_U1_CATEGORY_MATCH = {
+    "sports":   0.9030165023452591,     # 1.6249919774953683 / 1.799515261653623
+    "politics": 0.1736578770178561,     # 0.3125             / 1.799515261653623
+    "tech":     0.3929429198265138,     # 0.7071067811865476 / 1.799515261653623
 }
 
 
@@ -111,6 +137,23 @@ class TestOracleIsSound:
             age = (T - ts[article]) / H
             assert expected == pytest.approx(2 ** -age, rel=1e-15), article
         assert sum(EXPECTED_U1_PROFILE.values()) == pytest.approx(1.0, rel=1e-15)
+
+    def test_extended_log_adds_the_category_match_edge_cases(self):
+        log = toy_log_extended()
+        assert log.height == 27
+        assert log.head(20).equals(toy_log()), "the original 20 rows are untouched"
+        u4 = log.filter(pl.col("user_id") == "U4")
+        assert (u4.filter(pl.col("category") == "music")["ts"] >= T).all(), "U4 music only at/after t"
+        u5 = log.filter(pl.col("user_id") == "U5")
+        assert not u5["ts"].is_sorted(), "U5's future event is listed before its past ones"
+        assert u5.filter(pl.col("ts") < T)["ts"].n_unique() == 1, "U5's two eligible clicks share a ts"
+
+    def test_hand_written_cosines_are_scale_invariant(self):
+        """cos(P, e_c) computed from the normalised profile must equal the literals, which were
+        computed from the raw masses W: cosine ignores the normalising constant."""
+        norm_p = math.sqrt(sum(p * p for p in EXPECTED_U1_PROFILE.values()))
+        for category, expected in EXPECTED_U1_CATEGORY_MATCH.items():
+            assert expected == pytest.approx(EXPECTED_U1_PROFILE[category] / norm_p, rel=1e-15)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -240,3 +283,171 @@ class TestMindUntimedFallback:
                                              untimed_ts=SPLIT_START) == pytest.approx(0.5, rel=1e-12)
         assert impl.recency_weighted_profile(log, "U9", "tech", T, half_life,
                                              untimed_ts=SPLIT_START) == pytest.approx(0.25, rel=1e-12)
+
+
+# ----------------------------------------------------------------------------------------------
+# Batch path (SPEC.md §11.2): one call scores a whole frame of requests. It must reproduce the
+# row-by-row reference on every request.
+# ----------------------------------------------------------------------------------------------
+# Several scoring times, some equal to an event's ts, so the strict boundary is exercised per
+# anchor: T-72h = a01's ts, T-12h = a05's ts, T = a06/b04/c01/e03's ts, T+1h = a03's ts.
+PARITY_TIMES = [_at(hours=-72), _at(hours=-12), T, _at(hours=+1), _at(hours=+200)]
+
+
+def _requests(log: pl.DataFrame) -> pl.DataFrame:
+    """Every (user, t, category) combination, plus a user and a category the log never saw."""
+    users = sorted(set(log["user_id"])) + ["U404"]
+    categories = sorted(set(log["category"])) + ["unseen"]
+    rows = [(u, t, c) for u in users for t in PARITY_TIMES for c in categories]
+    return pl.DataFrame(rows, schema=[("user_id", pl.Utf8), ("t", pl.Datetime("us")),
+                                      ("candidate_category", pl.Utf8)], orient="row")
+
+
+def _assert_same(batch: list[float], reference: list[float]) -> None:
+    """NaN must meet NaN and 0.0 must meet 0.0 exactly; any other value must agree to 1e-12
+    relative. Bitwise equality is not required, because the batch path sums the same weights
+    in a different order, and float addition is not associative."""
+    assert len(batch) == len(reference)
+    for i, (b, r) in enumerate(zip(batch, reference)):
+        if math.isnan(r):
+            assert math.isnan(b), f"request {i}: reference NaN, batch {b}"
+        elif r == 0.0:
+            assert b == 0.0, f"request {i}: reference 0.0, batch {b}"
+        else:
+            assert b == pytest.approx(r, rel=1e-12), f"request {i}"
+
+
+class TestBatchParity:
+    @pytest.mark.parametrize("log_fn", [toy_log, toy_log_extended])
+    def test_matches_reference_on_every_request(self, log_fn):
+        impl, log = _impl(), log_fn()
+        req = _requests(log)
+        batch = impl.recency_profile_batch(log, req, H)["recency_weighted_profile"].to_list()
+        reference = [impl.recency_weighted_profile(log, u, c, t, H)
+                     for u, t, c in req.select("user_id", "t", "candidate_category").iter_rows()]
+        _assert_same(batch, reference)
+
+    def test_hits_the_hand_computed_values_directly(self):
+        """Parity alone would pass if both paths shared a bug; this pins the batch to the oracle."""
+        req = pl.DataFrame({"user_id": ["U1"] * 3, "t": [T] * 3,
+                            "candidate_category": list(EXPECTED_U1_PROFILE)})
+        got = _impl().recency_profile_batch(toy_log(), req, H)["recency_weighted_profile"].to_list()
+        assert got == pytest.approx(list(EXPECTED_U1_PROFILE.values()), rel=1e-12)
+
+    def test_matches_reference_with_mind_fallback(self):
+        impl, log = _impl(), _untime("a04")
+        req = _requests(log)
+        batch = impl.recency_profile_batch(log, req, H, untimed_ts=SPLIT_START)
+        reference = [impl.recency_weighted_profile(log, u, c, t, H, untimed_ts=SPLIT_START)
+                     for u, t, c in req.select("user_id", "t", "candidate_category").iter_rows()]
+        _assert_same(batch["recency_weighted_profile"].to_list(), reference)
+
+    def test_keeps_request_order_and_passes_other_columns_through(self):
+        """Callers join the result back to impressions by position, so order is part of the contract."""
+        req = (_requests(toy_log()).with_row_index("impression_id")
+               .sample(fraction=1.0, shuffle=True, seed=7))
+        out = _impl().recency_profile_batch(toy_log(), req, H)
+        assert out.columns == req.columns + ["recency_weighted_profile"]
+        assert out.drop("recency_weighted_profile").equals(req)
+
+    def test_rejects_what_the_reference_rejects(self):
+        req = _requests(toy_log())
+        with pytest.raises(ValueError):
+            _impl().recency_profile_batch(toy_log(), req, timedelta(0))
+        with pytest.raises(ValueError):
+            _impl().recency_profile_batch(_untime("a04"), req, H)
+
+
+# ----------------------------------------------------------------------------------------------
+# category_match (SPEC.md §11.3): cosine between the recency profile and the candidate's
+# category. Oracle first — these fail until src/features/behavioural.py implements it.
+# ----------------------------------------------------------------------------------------------
+class TestCategoryMatch:
+    @pytest.mark.parametrize("category", sorted(EXPECTED_U1_CATEGORY_MATCH))
+    def test_matches_hand_computation(self, category):
+        got = _impl().category_match(toy_log_extended(), "U1", category, T, H)
+        assert got == pytest.approx(EXPECTED_U1_CATEGORY_MATCH[category], rel=1e-12)
+
+    def test_only_category_scores_one_and_the_at_t_event_is_excluded(self):
+        """U4 read only science before t (weights 2^(-10/24) + 2^(-40/24)); cos = 1. The music
+        click at exactly t, if leaked with weight 1, drops this to 0.7287."""
+        got = _impl().category_match(toy_log_extended(), "U4", "science", T, H)
+        assert got == pytest.approx(1.0, rel=1e-12)
+
+    def test_equal_mass_categories_score_one_over_root_two(self):
+        """U5's sports and tech clicks share one timestamp, so equal weight: cos = 0.5 / sqrt(0.5)
+        = 1/sqrt(2) each. The future sports click, if leaked, tips sports to 0.9589."""
+        impl = _impl()
+        for category in ("sports", "tech"):
+            got = impl.category_match(toy_log_extended(), "U5", category, T, H)
+            assert got == pytest.approx(0.7071067811865475, rel=1e-12), category
+
+    def test_categories_seen_only_at_or_after_t_score_exactly_zero(self):
+        impl, log = _impl(), toy_log_extended()
+        assert impl.category_match(log, "U4", "music", T, H) == 0.0          # at t and t + 2 h
+        assert impl.category_match(log, "U1", "entertainment", T, H) == 0.0  # at exactly t
+        assert impl.category_match(log, "U1", "weather", T, H) == 0.0        # after t
+
+    def test_other_users_categories_score_exactly_zero(self):
+        """U4 reads science; U1 never does. U5 reads no politics; U1 and U2 do."""
+        impl, log = _impl(), toy_log_extended()
+        assert impl.category_match(log, "U1", "science", T, H) == 0.0
+        assert impl.category_match(log, "U5", "politics", T, H) == 0.0
+
+    def test_no_eligible_history_is_nan(self):
+        assert math.isnan(_impl().category_match(toy_log_extended(), "U3", "tech", T, H))
+
+    def test_row_order_does_not_matter(self):
+        impl = _impl()
+        cases = [("U1", "sports"), ("U4", "science"), ("U5", "tech")]
+        reference = [impl.category_match(toy_log_extended(), u, c, T, H) for u, c in cases]
+        for seed in range(5):
+            shuffled = toy_log_extended().sample(fraction=1.0, shuffle=True, seed=seed)
+            assert [impl.category_match(shuffled, u, c, T, H) for u, c in cases] == reference, seed
+
+    def test_null_timestamp_without_fallback_is_rejected(self):
+        with pytest.raises(ValueError):
+            _impl().category_match(_untime("a04"), "U1", "sports", T, H)
+
+
+class TestCategoryMatchBatchParity:
+    """`category_match_batch` against the row-by-row `category_match`, as §11.2 does for the profile."""
+
+    @pytest.mark.parametrize("log_fn", [toy_log, toy_log_extended])
+    def test_matches_reference_on_every_request(self, log_fn):
+        impl, log = _impl(), log_fn()
+        req = _requests(log)
+        batch = impl.category_match_batch(log, req, H)["category_match"].to_list()
+        reference = [impl.category_match(log, u, c, t, H)
+                     for u, t, c in req.select("user_id", "t", "candidate_category").iter_rows()]
+        _assert_same(batch, reference)
+
+    def test_hits_the_hand_computed_values_directly(self):
+        req = pl.DataFrame({"user_id": ["U1", "U1", "U1", "U4", "U5"], "t": [T] * 5,
+                            "candidate_category": ["sports", "politics", "tech", "science", "tech"]})
+        got = _impl().category_match_batch(toy_log_extended(), req, H)["category_match"].to_list()
+        expected = [EXPECTED_U1_CATEGORY_MATCH[c] for c in ("sports", "politics", "tech")] + [
+            1.0, 0.7071067811865475]
+        assert got == pytest.approx(expected, rel=1e-12)
+
+    def test_matches_reference_with_mind_fallback(self):
+        impl, log = _impl(), _untime("a04")
+        req = _requests(log)
+        batch = impl.category_match_batch(log, req, H, untimed_ts=SPLIT_START)["category_match"].to_list()
+        reference = [impl.category_match(log, u, c, t, H, untimed_ts=SPLIT_START)
+                     for u, t, c in req.select("user_id", "t", "candidate_category").iter_rows()]
+        _assert_same(batch, reference)
+
+    def test_keeps_request_order_and_passes_other_columns_through(self):
+        req = (_requests(toy_log_extended()).with_row_index("impression_id")
+               .sample(fraction=1.0, shuffle=True, seed=11))
+        out = _impl().category_match_batch(toy_log_extended(), req, H)
+        assert out.columns == req.columns + ["category_match"]
+        assert out.drop("category_match").equals(req)
+
+    def test_rejects_what_the_reference_rejects(self):
+        req = _requests(toy_log())
+        with pytest.raises(ValueError):
+            _impl().category_match_batch(toy_log(), req, timedelta(0))
+        with pytest.raises(ValueError):
+            _impl().category_match_batch(_untime("a04"), req, H)

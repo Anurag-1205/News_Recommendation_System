@@ -401,3 +401,291 @@ into an otherwise-correct implementation (C-007):
 | decay by list position instead of t − ts | `test_out_of_order_event_is_weighted_by_timestamp_not_row_order` | 6 / 16 |
 | no `user_id` filter | `test_other_users_events_are_excluded` | 7 / 16 |
 | none (control) | — | 0 / 16 |
+
+### 11.2 · `recency_profile_batch`: the same feature for millions of requests
+
+**Why a second implementation.** The reference (`recency_weighted_profile`) filters the whole log
+for every call. That is the right thing to read and test, and the wrong thing to run 13.5M times.
+The batch path computes the identical quantity for a whole frame of requests in one vectorised
+Polars pass. **The reference is its oracle.**
+
+**Contract**
+
+| | |
+|---|---|
+| Signature | `recency_profile_batch(log, requests, half_life, *, untimed_ts=None) -> pl.DataFrame` |
+| `requests` | columns `user_id`, `t`, `candidate_category`; any other columns (e.g. `impression_id`, `article_id`) pass through untouched |
+| Returns | `requests`, same row order, with `recency_weighted_profile` appended |
+| Semantics | identical to §11.1 per row: strict `ts < t`, timestamp decay, 0.0 / NaN rules, `untimed_ts`, `ValueError` cases |
+
+**Algorithm** (each step is one Polars operation, lazily planned):
+
+1. **Anchors** = distinct `(user_id, t)`. The profile depends on the user and the moment, not on
+   the candidate, so it is built once per impression instead of once per candidate. Measured
+   mean candidates per impression: EB-NeRD small validation 12.0; MIND 37.2 / 37.5 / 39.3 in
+   small train, small dev and large test.
+2. **Pair** each anchor with that user's events (an equi-join on `user_id`), then keep `ts < t`.
+3. **Weight** each pair with 2^(−(t − ts)/h); sum per (anchor, category) and per anchor.
+4. **Look up** each request's category: its mass divided by the anchor total. 0.0 if absent; NaN
+   if the anchor has no eligible events.
+
+**Cost, and where it breaks.** Step 2 materialises Σ over anchors of that user's history length:
+reads and memory are linear in (impressions × history length). This is the bound to watch.
+The Kaggle driver passes `requests` one chunk at a time (a Parquet row group), and only log rows
+for users in the chunk are read. **Not yet measured on real data.** Throughput and peak memory
+on EB-NeRD come when this is wired into the Kaggle driver, and are recorded in `RESULTS.md` Q1.
+The known cheaper alternative, if the measurement demands it, is per-user prefix sums of decayed
+mass with an as-of lookup at `t`. That is linear in (events + requests) with no pair table, but it
+is subtler (duplicate timestamps, strictness of the as-of match), so it is deferred until a
+measured number justifies it.
+
+**Verification — parity oracle** (`TestBatchParity`)
+
+- **Grid.** Every (user, t, category) combination over both toy logs, plus a user and a category
+  never seen: **360 requests**, of which 128 have a NaN reference value, 150 an exact 0.0 and 82 a
+  non-zero value.
+- **Boundary per anchor.** The scoring times include moments equal to event timestamps
+  (t − 72 h, t − 12 h, t, t + 1 h), so the strict boundary is exercised per anchor.
+- **Also covered:** the MIND fallback, request-order preservation with shuffled requests and a
+  passthrough column, and the same `ValueError` cases as the reference.
+- **Absolute check.** One test pins the batch to the hand-computed U1 values directly, because
+  parity alone would pass if both paths shared a bug.
+- **"Same output" means:** NaN meets NaN and 0.0 meets 0.0 **exactly**; every other value agrees
+  within **1e-12 relative**. Bitwise identity is not required: the batch path sums the same
+  weights in a different order, and float addition is not associative.
+
+**Mutation check.** Planted in the batch path alone:
+
+| Planted bug | Parity tests failing |
+|---|---|
+| `ts <= t` | 4 / 6 |
+| no user filter (cross join) | 3 / 6 |
+
+The hand-computed-values test alone does **not** catch the second bug: with a single requested
+user, the upstream semi-join already restricts the log to that user. The many-user parity grid is
+what catches it.
+
+### 11.3 · `category_match`: cosine between the recency profile and the candidate's category
+
+**Status: implemented.** The cosine definition was confirmed by Anurag (CONTEXT.md C-010, C-012).
+There are two versions: row-by-row `category_match`, and `category_match_batch`, which is held to
+the row-by-row one by the §11.2 parity grid (`TestCategoryMatchBatchParity`). Both batch functions
+share the private helpers `_decayed_category_mass` (steps 1–3) and `_lookup` (step 4).
+
+**What it measures.** How close the candidate's category is to the centre of the user's recent
+interests, as a cosine similarity. The recency profile *P* (§11.1) is a vector over categories;
+the candidate is the one-hot vector **e**_c for its category:
+
+```
+category_match(user, candidate, t) = cos(P, e_c) = P(c) / ‖P‖₂ ,   ‖P‖₂ = sqrt(Σ_k P(k)²)
+```
+
+Because cosine ignores scale, the same value comes from the un-normalised decayed masses:
+W_c / ‖W‖₂. The oracle checks both forms give identical values.
+
+**Why cosine, not the dot product.** P · **e**_c = P(c), which is exactly `recency_weighted_profile`,
+so a dot-product "match" would hand the reranker a duplicate column. The cosine divides by ‖P‖₂,
+which measures how concentrated the user's interests are:
+
+- 1.0 when the candidate is the user's only recent category;
+- 1/√k when the user reads k categories equally.
+
+So category_match = recency_weighted_profile / ‖P‖₂. It adds exactly one piece of information,
+profile concentration. Alternatives, if that is judged too thin, are open for Anurag:
+
+- a top-1 indicator: is c the user's heaviest category;
+- lift over a point-in-time population prior, P(c) / P_all(c);
+- a subcategory-level match (both datasets carry subcategories).
+
+**Inputs, boundary, outputs.** These are identical to §11.1, including the signature, strict
+`ts < t`, timestamp decay, `untimed_ts` and `ValueError` cases:
+
+- `category_match(log, user_id, candidate_category, t, half_life, *, untimed_ts=None) -> float`;
+- value in [0, 1]; **0.0** for a category the user has no eligible clicks in; **NaN** with no
+  eligible history;
+- `serving_ok = True`.
+
+**Verification — oracle** (`TestCategoryMatch`, extended toy log). The 20-event log gains U4 and U5,
+7 events, 27 in total. The original 20 rows are unchanged, so every §11.1 value still holds.
+
+| Case | Toy events | Asserted |
+|---|---|---|
+| multi-category user | U1 (profile as §11.1) | sports 0.9030165, politics 0.1736579, tech 0.3929429 (= W_c / ‖W‖₂, ‖W‖₂ = 1.7995153) |
+| only one category | U4: science ×2 before t | 1.0; **a leaked at-t music click would give 0.7287** |
+| equal mass | U5: sports and tech at one timestamp | 1/√2 each; **a leaked future sports click would give 0.9589** |
+| exactly at t / after t | U4 music at t and at t + 2 h | P = 0 → exactly 0.0 |
+| other users | U1 never reads science (U4 does) | exactly 0.0 |
+| no eligible history | U3 | NaN |
+| out of order | extended log shuffled, 5 seeds | identical values |
+| invalid input | null `ts` without `untimed_ts` | `ValueError` |
+
+**Mutation check.** Two planted bugs, each run alone:
+
+| Planted bug | Tests failing |
+|---|---|
+| dot product P(c) instead of the cosine, in the row-by-row version | 4 / 10 (the U1 values and U5) |
+| L1 sum instead of the L2 norm, in the batch version | 4 / 6 batch parity tests |
+
+U4 passes under the first bug, correctly: with a single category, the cosine and the dot
+product are both 1.0.
+
+---
+
+## 11.4 – 11.7 · Phase 1.2: slate, session and dwell features, and the unsafe registry
+
+These features come from Aayush's schema mapping (CONTEXT.md C-013). Every definition below
+rests on a fact measured on 2026-09-11. The ones that changed the mapping are marked **(correction)**.
+
+**What the EB-NeRD files contain.** The Codabench test `behaviors.parquet` has `impression_time`,
+`read_time`, `scroll_percentage`, `session_id` and `article_ids_inview`. It **lacks**
+`article_ids_clicked`, `article_id`, `next_read_time` and `next_scroll_percentage`. Train and
+validation have all of them.
+
+| Feature | Datasets | `serving_ok` | In Codabench test file | Section |
+|---|---|---|---|---|
+| `cand_position` | MIND, EB-NeRD | ✓ | ✓ | 11.4 |
+| `n_candidates` | MIND, EB-NeRD | ✓ | ✓ | 11.4 |
+| `session_pos` | EB-NeRD | ✓ | ✓ | 11.5 |
+| `n_prior_clicks_in_session` | EB-NeRD | ✓ | **✗ (correction)** | 11.5 |
+| `session_len` | EB-NeRD | **✗ (correction)** | ✓ | 11.5 |
+| `hist_read_time_mean` | EB-NeRD | ✓ | ✓ | 11.6 |
+| `hist_scroll_mean` | EB-NeRD | ✓ | ✓ | 11.6 |
+| `cur_read_time` | EB-NeRD | **✗** | ✓ | 11.7 |
+| `cur_scroll_percentage` | EB-NeRD | **✗** | ✓ | 11.7 |
+
+The two columns are different questions:
+
+- **`serving_ok`** asks whether a live system could know the value when the request arrives.
+  If not, the feature is an ablation row only (Q9).
+- **In test file** asks whether the offline Codabench test set supplies the input. If not, the
+  feature cannot be used by the submission model, even though it is fine in production. Training
+  on it recreates the A1 submission-3 skew (§7).
+
+Code lives in `src/features/behavioural.py`, and oracles in `tests/test_session_features.py`.
+
+### 11.4 · Slate features: `cand_position`, `n_candidates`
+
+`slate_features(impressions) -> pl.DataFrame`
+
+- **Input:** `impression_id` and `candidates` (a list). **Nothing else is read, in particular not
+  labels,** so the features are computable on an unlabelled test impression. That is this
+  feature's behaviour-window boundary: its only input is the slate the request itself carries.
+- **Output:** one row per candidate, in input order and then list order: `impression_id`,
+  `article_id`, `cand_position` (1 = first in the list) and `n_candidates` (the list length).
+  An empty list yields no rows.
+
+**Measured** with `scripts/check_phase1_data.py`, output in `RESULTS.md` Q1. Click rates come from
+the first 50,000 impressions of each split:
+
+- **The order is not a label artifact.** Click rate by position quintile is nearly flat:
+  - EB-NeRD train 0.087–0.094, validation 0.080–0.087;
+  - MIND small train 0.036–0.045, dev 0.037–0.044.
+
+  A "clicked items first" construction would put quintile 0 far above the rest.
+- **EB-NeRD lists are not sorted by article id,** so position is not an article-age proxy. Only
+  0.2% of lists are sorted in either direction, and the figure is identical in train, validation
+  and the test file.
+- **A weak position effect is present, with the same shape in train and dev**, so it is safe to
+  use. MIND quintile 0 vs 4 is 0.0449 vs 0.0362 in train and 0.0440 vs 0.0373 in dev.
+- **Open:** whether list order equals the order shown on screen is not established by anything we
+  have verified. The feature is therefore described as *list position*, not display position.
+
+### 11.5 · Session features: `session_pos`, `n_prior_clicks_in_session`, `session_len`
+
+`session_features(behaviors) -> pl.DataFrame`
+
+- **Input:** `impression_id`, `user_id`, `session_id` and `t`, plus `clicked` (list) if available.
+- **Output:** one row per input row, in input order.
+
+**The session key is `(user_id, session_id)` (correction).** In the test file, `session_id = 0`
+is shared by all 200,000 `is_beyond_accuracy` placeholder rows, one per user. Keyed on
+`session_id` alone, that becomes a 200,000-impression "session", and the self-join would need
+about 4×10¹⁰ pairs. Keyed on `(user_id, session_id)`:
+
+- the largest test session is 118 impressions (p99 = 9);
+- the whole 13.5M-row file needs **47.3M** pairs;
+- each placeholder row is a single-impression session.
+
+In `ebnerd_small` train, no session spans more than one user.
+
+| Feature | Definition | Boundary |
+|---|---|---|
+| `session_pos` | 1 + number of the session's impressions with `t' < t` | strict: a tie at exactly `t` is not "prior" (sessions containing tied timestamps: 5 in small train, 195 in test) |
+| `n_prior_clicks_in_session` | Σ `len(clicked)` over those same prior impressions | strict |
+| `session_len` | number of the session's impressions, **including those after t** | **none, which is why it is unsafe** |
+
+- **`session_len` is serving-unsafe (correction; the mapping listed it as safe).** A live system
+  does not know how long a session will last. Its value changes when a future impression is
+  appended, and a test demonstrates this. The safe "length so far" is `session_pos` − 1, which
+  `session_pos` already carries.
+- **`n_prior_clicks_in_session` cannot feed the submission model (correction).** It is built from
+  `article_ids_clicked`, which the test file does not ship. When `clicked` is absent, the column is
+  **omitted, not zero-filled**: a silent zero is exactly the degenerate-at-test value that caused
+  A1's skew.
+- **It is also nearly redundant.** Every `ebnerd_small` train impression has at least one click
+  (0 without, mean 1.006 clicks), so it is ≈ 1.006 × (`session_pos` − 1).
+- **Cost:** a self-join within sessions, Σ over sessions of length² pairs. That is 731k pairs for
+  small train, which is fine.
+
+### 11.6 · Dwell features: `hist_read_time_mean`, `hist_scroll_mean`
+
+`dwell_features(history, requests) -> pl.DataFrame`
+
+- **Inputs:**
+  - `history`: one row per past click, with `user_id`, `ts`, `read_time`, `scroll_percentage`.
+    For EB-NeRD this is the exploded `history.parquet` (`impression_time_fixed`,
+    `read_time_fixed`, `scroll_percentage_fixed`).
+  - `requests`: `user_id` and `t`; other columns pass through.
+- **Definition:** the mean over the user's history clicks with **`ts < t`**, strict as in §11.1.
+  Null values are skipped (10.5% of `scroll_percentage_fixed` is null in small train;
+  `read_time_fixed` has none).
+- **Missing values:** **NaN** when no eligible values exist, same convention as §11.1. A null `ts`
+  raises `ValueError`.
+
+### 11.7 · Serving-unsafe features and the feature registry
+
+`current_page_features(behaviors) -> pl.DataFrame` returns `impression_id`, `cur_read_time` and
+`cur_scroll_percentage`: the impression's own `read_time` and `scroll_percentage`.
+
+- **Why they are unsafe:** they describe the page view the impression belongs to, which continues
+  after the moment the recommendation is served. They are in the test file, so a model could
+  exploit them on the leaderboard, but no live system has them at request time.
+- **Consequence:** they exist only to supply the Q9 "with" row. (A1 measured the analogous
+  `next_read_time`: adding it moved AUC from 0.50 to 0.96.)
+- **Data note:** `scroll_percentage` is null for 70.3% of train rows and 71.6% of test rows.
+
+**The registry** is in `src/features/behavioural.py`, so the Q9 ablation is driven by data rather
+than by memory:
+
+- `SERVING_OK`: feature → bool, covering every feature in §11.
+- `UNSAFE_FEATURES`: derived from it; currently `cur_read_time`, `cur_scroll_percentage` and
+  `session_len`.
+- `ABSENT_FROM_TEST_FILE`: currently `n_prior_clicks_in_session`.
+- `drop_unsafe(df)`: removes exactly the unsafe columns.
+
+**Verification** (`tests/test_session_features.py`, hand-computed toy frames):
+
+| Case | Asserted |
+|---|---|
+| slate: 3-, 1-, 0- and 2-candidate lists, string and integer ids | positions 1..n in list order, `n_candidates` = n, no rows for the empty list |
+| slate never reads labels | same output with labels dropped or permuted |
+| session: 10 impressions, 5 sessions | hand-computed `session_pos`, `n_prior_clicks_in_session`, `session_len` for every row |
+| tie at exactly t | two impressions at t in one session get the same `session_pos` (4) and click count (3) |
+| future impressions | appending one after t changes none of the safe features and changes `session_len` 6 → 7, which is why it is unsafe |
+| session key | U2's session 100 is separate from U1's session 100; the two `session_id = 0` rows stay separate |
+| unlabelled input | without `clicked`, no `n_prior_clicks_in_session` column at all, rather than zeros |
+| dwell: one user at two times | at t: read 30.0, scroll 60.0; at t − 2 d: 10.0 and 40.0 (the click at exactly that time is excluded) |
+| dwell leak trap | a click at exactly t (999) and after t (777) would move the read mean to 272.25 or beyond |
+| dwell missing values | U3 with no history → NaN, NaN; U4 with no scroll values → 20.0, NaN |
+| registry | the unsafe list is exact; every emitted feature column is registered; `drop_unsafe` removes exactly those columns |
+
+**Mutation check.** Each bug was planted alone:
+
+| Planted bug | Tests failing |
+|---|---|
+| session boundary `t' <= t` | 4 / 19, including `test_tie_at_exactly_t_is_not_prior` |
+| session keyed on `session_id` alone (the sentinel trap) | 5 / 19, including `test_sessions_are_keyed_by_user_and_session_id` |
+| dwell boundary `ts <= t` | 4 / 19, including `test_click_at_exactly_t_is_excluded` |
+
+The session `<=` bug does **not** fail the append-the-future test, correctly: `<=` still excludes
+events strictly after t. It is the tie test that catches it, which is why both tests exist.
