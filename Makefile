@@ -1,4 +1,4 @@
-.PHONY: help env fetch-small fetch-large fetch-mind data test eval bench submit-mind clean-pyc
+.PHONY: help env fetch-small fetch-large fetch-mind data test eval bench clean-pyc
 .DEFAULT_GOAL := help
 
 VENV := .venv
@@ -31,14 +31,11 @@ data: env  ## rebuild raw -> unified schema -> temporal split -> feature store (
 test: env  ## run the test suite, incl. the no-leakage assertion (Q9)
 	PYTHONPATH=. $(VENV)/bin/pytest tests/ -v
 
-submit-mind: env  ## fit popularity, measure on dev, write + validate the MIND submission
-	PYTHONPATH=. $(PY) scripts/make_submission_mind.py
+eval:  ## full two-stage metrics, slices, bootstrap CIs (A2 Q5)
+	@echo "make eval: not implemented (A2 P5)"; exit 1
 
-eval:  ## metrics table for a predictions file + split (Q4)
-	@echo "make eval: not implemented (P2)"; exit 1
-
-bench:  ## index build time, peak RSS, per-query latency (Q6 "breaks at 10x")
-	@echo "make bench: not implemented (P5)"; exit 1
+bench:  ## index memory, p99 latency, cost/QPS (A2 Q4)
+	@echo "make bench: not implemented (A2 P4)"; exit 1
 
 clean-pyc:
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +

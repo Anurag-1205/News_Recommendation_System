@@ -15,3 +15,4 @@ pytest
 tqdm
 matplotlib
 huggingface_hub[cli]
+kaggle              # CLI: push code/data as datasets, run kernels on Kaggle T4s (CONTEXT.md C-004)

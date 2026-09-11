@@ -37,27 +37,29 @@ venv/
 # ============================================================================
 # AI-usage prompts — submitted separately, not via GitHub
 prompts/
-# AI usage log — required by A1 Q7.4 but delivered with the report, not via GitHub
-AI_USAGE.md
 # Assembled Moodle bundle, regenerated on demand by scripts/make_deliverables.sh
 report/deliverables/
 # Leaderboard screenshots — submitted with the report
 report/*.png
 report/*.jpg
 
+# Third-party baseline code (e.g. ebnerd-benchmark for NRMS); commit hash pinned in CONTEXT.md.
+external/
+# Credentials — never in git, even if one is copied into the repo by mistake.
+kaggle.json
+
 # ============================================================================
 # Local working documents, not assignment deliverables.
+# CLAUDE.md, PLAN.md, CONTEXT.md and AI_USAGE.md are tracked on the A2 branch so both team
+# members' agents share them (CONTEXT.md C-002).
 # ============================================================================
-CLAUDE.md
-PLAN.md
 LEARNING_NOTES.md
 ebnerd_analysis.ipynb
 mind_analysis.ipynb
 
 # ============================================================================
 # Design-note build artifacts and the Moodle deliverable itself.
-# The note is submitted through Moodle (see prompts/07 DD-12), not via GitHub;
-# report/design_note.md remains tracked as the readable in-repo version.
+# The note is submitted through Moodle, not via GitHub.
 # ============================================================================
 report/*.tex
 report/*.pdf
