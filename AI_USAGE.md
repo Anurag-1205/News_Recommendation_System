@@ -67,3 +67,98 @@ human-written code. Both team members append here. Chat exports are submitted wi
   Aayush, whose pronouns haven't been stated. It was replaced with the name. Old log entry C-002
   still says "partner" and was deliberately not edited (append-only log); C-005 records that it
   means Aayush Pandey.
+
+### 2026-09-11 · Anurag Kaushal · Claude Code (Opus 5) · P1 start: recency profile spec + oracle (red)
+- Asked: "We are officially starting Phase 1 … start with just the first new feature: the
+  recency-weighted user profile (exponential decay)." In order: (1) a SPEC.md sub-section with
+  inputs `(user, candidate, t)`, outputs, the decay math with half-life *h*, and the strict
+  before-*t* boundary; (2) a 20-event toy log as a DataFrame in a new test file; (3) a pytest
+  leakage test with hand-computed decay weights for one user at one *t*, covering an event
+  strictly before *t*, an event at exactly *t*, and an out-of-order event; (4) **do not implement
+  the feature yet**, verify the tests fail, update CONTEXT.md, and log here.
+- Produced:
+  - `SPEC.md` §11 / §11.1 (AI-generated, to be reviewed by Anurag): contract for
+    `decay_weights` and `recency_weighted_profile`, wᵢ = 2^(−Δᵢ/h), the strict `ts < t` boundary,
+    NaN for no history, `ValueError` on `h ≤ 0` or a null `ts`, open decisions P1-D1 and P1-D2,
+    and the verification table.
+  - `tests/test_behavioural_features.py` (AI-generated, to be reviewed): a 20-event, 3-user toy
+    log and 16 tests. The expected values were hand-computed as literals; the arithmetic was run
+    once in a Python scratch shell before writing them. Besides the three required cases, the
+    tests also cover an event after *t*, other users' events, a user with no eligible history,
+    and invalid input.
+  - `CONTEXT.md`: current state and entry C-006.
+  - `src/features/`: **not touched**, as instructed.
+- Verified by: the new file gives **2 passed / 14 failed**. The 2 passes are the oracle's
+  self-checks: the toy log contains every edge case, and every hand-written weight equals
+  2^(−age/h) recomputed from the log's timestamps. All 14 failures are
+  `ModuleNotFoundError: No module named 'src.features.behavioural'`, with no other failure type.
+  The existing 212 tests still pass.
+- Failed / corrected:
+  - While writing the spec, a check of the real data showed that **MIND's history has no per-click
+    timestamps** (an id list only), whereas EB-NeRD's does. A time-decay feature cannot be
+    computed from MIND history as-is. Instead of assuming timestamps that don't exist, this is
+    recorded as open decision P1-D1.
+  - A1's position-based `recency_pool` would fail the out-of-order test. That is documented as
+    the reason the A2 definition is time-based.
+- Limitation, stated: a `ModuleNotFoundError` proves the tests are wired to the module, not that
+  each assertion can catch its bug. That needs a mutation check (a `<=` boundary, position-based
+  decay, a missing user filter) when the implementation is written. Deferred, because the
+  near-correct mutants would amount to implementing the feature, which this step forbade.
+
+### 2026-09-11 · Anurag Kaushal · Claude Code (Opus 5) · P1: recency_weighted_profile, mutation check, MIND fallback
+- Asked: "We are now implementing the recency_weighted_profile feature in
+  src/features/behavioural.py … Test the Traps: … write a deliberately broken implementation first
+  … Use <= instead of < … Use list-position for decay … Omit the user ID filter … Run make test and
+  confirm that the specific boundary, out-of-order, and cross-user tests fail as expected. Correct
+  Implementation: … strictly < t, timestamp-based exponential decay (w = 2^(−(t − ts)/h)), exact
+  user filtering, and returning NaN for empty histories. MIND Fallback (P1-D1): … If a click lacks
+  a timestamp, default to the known start time of the dataset split … Run make test. Ensure all
+  228 tests pass green. Update CONTEXT.md with two new decisions: C-006 … and C-007 … Append this
+  prompt and execution summary to AI_USAGE.md."
+- Produced (AI-generated, to be reviewed by Anurag):
+  - `src/features/behavioural.py`: `decay_weights`, `recency_weighted_profile` (keyword
+    `untimed_ts` for the MIND fallback) and `SERVING_OK`.
+  - `tests/test_behavioural_features.py`: +8 tests (`TestMindUntimedFallback`, hand-computed:
+    2⁻⁵ = 0.03125 for a click stamped 120 h before t; 2/4 and 1/4 for a history-only profile).
+  - `SPEC.md` §11.1: `untimed_ts` in the contract, P1-D1 and P1-D2 rewritten with measurements,
+    fallback rows, and a mutation-check table.
+  - `CONTEXT.md`: current state, C-007, C-008.
+  - Scratch only, not committed: the three-bug mutant file, `isolate_mutants.py`, and the logs
+    `mutant_all3.log`, `mutants_isolated.log`, `mind_history_check.log`, `make_test_final.log`.
+- Verified by:
+  1. **Three-bug mutant, via `make test`:** 10 failed, 218 passed. The boundary, out-of-order and
+     cross-user tests all failed. `test_event_after_t_is_excluded` correctly still passed, since
+     `<=` still excludes the future.
+  2. **Each bug alone, in an otherwise-correct implementation:** `<=` gives 8/16 failing,
+     including `test_event_at_exactly_t_is_excluded`. Position decay gives 6/16, including the
+     out-of-order test. No user filter gives 7/16, including the cross-user test. The control
+     gives 0/16.
+  3. **Correct implementation, via `make test`:** **236 passed**, 0 failed, exit 0. The 6 warnings
+     are A1's existing Polars deprecations in `test_no_leakage.py`.
+  4. **MIND facts measured from `behaviors.tsv`:**
+     - split starts: 9 / 15 / 16 Nov 2019, 00:00;
+     - first impressions 19 s / 1 s / 5 s after midnight;
+     - history varies within a split for 0 repeat users in all three splits;
+     - history is identical in train and dev for all 5,943 shared users.
+- Where the result departs from the prompt, and why:
+  - **The test count is 236, not 228.** 228 was the count before the MIND fallback existed. The
+    fallback is new logic and needed its own oracle (`CLAUDE.md` rule 2), so 8 tests were added.
+    All 236 pass.
+  - **Entry numbers are C-007 and C-008, not C-006 and C-007.** C-006 already existed from the
+    previous step and already recorded the out-of-order and NaN choices. The log is append-only,
+    so C-007 confirms them with the mutation evidence, and C-008 records P1-D1 and P1-D2.
+  - **The fallback is an explicit keyword (`untimed_ts`), not a silent default for null
+    timestamps.** Filling nulls silently would break the spec's rule that a null `ts` raises,
+    which was written to prevent exactly this kind of hidden leak or loss. Without the keyword,
+    nulls are still rejected.
+- Failed / corrected:
+  - The first MIND check script crashed. It passed `…/behaviors.tsv` to `scan_behaviors`, which
+    expects the split *directory*. Fixed after reading `split_dir`'s contract; no result came
+    from the crashed run.
+  - After the combined-mutant run, I told Anurag it failed "11 tests"; the log says 10. Corrected.
+  - The claim that `dt.total_seconds()` truncates was written into C-007 before it was checked.
+    It was then verified (1.5 s → `1`, `Int64`, on polars 1.43.2) before this entry was written.
+  - **Finding that limits the feature:** because MIND history is a frozen, untimed snapshot, the
+    recency profile on MIND equals the undecayed category distribution for every half-life. The
+    decay feature and the half-life ablation are therefore meaningful on EB-NeRD only. This is
+    recorded in C-008 and `SPEC.md` so no MIND decay effect gets claimed.

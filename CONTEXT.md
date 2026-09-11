@@ -21,13 +21,13 @@ _Last updated: 2026-09-11 by Anurag (agent: Claude Code)_
 | | |
 |---|---|
 | Branch | `a2-click-logs`, from `main` at `be15ee6` (A1 final) |
-| Phase | **P0 Setup**, see `PLAN.md` §3 |
+| Phase | **P1 Behavioural features started** (Anurag). P0 setup committed (`779cad4`); the P0 exit-gate items owned by Aayush are still open. See `PLAN.md` §3 |
 | Team | **Anurag Kaushal**: modelling (P1, P2, P3.1). **Aayush Pandey**: measurement (P3.4a paired bootstrap, P4, P5). Joint: P0, P3.2–3.4, P6. Final (C-005) |
-| Anurag Kaushal | done: branch, docs, Kaggle CLI (C-001–C-004). Now: P0 NRMS smoke test on Kaggle (PLAN P0.7). Next: P1 behavioural features (12–13 Sep), with P3.1 NRMS runs in the background |
+| Anurag Kaushal | done: branch, docs, Kaggle CLI (C-001–C-004). **P1, feature 1 of ~6 done:** `recency_weighted_profile` in `src/features/behavioural.py`, with the MIND fallback. Mutation-checked (C-007), P1-D1 decided (C-008), `make test` green at 236. Next P1 unit: the decayed category profile's siblings (click count, category match, session, dwell, position, freshness; `PLAN.md` P1 table), then the batch path that computes features for millions of impressions and must match the reference on the toy log. Still owed from P0: NRMS smoke test on Kaggle (PLAN P0.7) |
 | Aayush Pandey | not started. Now: P0 clean-clone check (`make env && make test`) and Kaggle verification on Aayush's account (PLAN P0.2–P0.3). Next: P3.4a paired bootstrap harness (12–14 Sep) |
 | Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004) |
 | Blocked on | team decisions D1–D9 in `PLAN.md` §5; the scores-file format (`PLAN.md` §2) must be agreed and pinned in `SPEC.md` |
-| Next up | P0 exit gate: both machines green on `make test`, both Kaggle accounts verified, NRMS runs on EB-NeRD demo |
+| Next up | Anurag: next P1 feature; choose h (P1-D2) once the batch path can run the grid on EB-NeRD. Aayush: P0 clean-clone check. `make test` is **green (236 passed)**, so pushing is safe |
 
 ---
 
@@ -147,6 +147,124 @@ Entry format:
 - Affects: `PLAN.md` §0, §2, §3 and the per-phase headings; `CONTEXT.md` §1. Earlier log entries
   that say "partner" (C-002) are left unedited, as the log is append-only; "partner" there means
   Aayush Pandey.
+- Status: active
+
+### C-006 · P1 begins: `recency_weighted_profile` specified and oracle written before any code
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code)
+- Decision: the first P1 feature is a **category profile with exponential time decay**,
+  `wᵢ = 2^(−(t − tsᵢ)/h)`, normalised to a distribution. The feature value is the profile's mass
+  on the candidate's category (`SPEC.md` §11.1). The contract fixes:
+  - **the boundary:** strict `ts < t`, so events at exactly t and after t are excluded;
+  - **decay by timestamp, not row position:** results are invariant to row order, so out-of-order
+    events are handled rather than rejected;
+  - **NaN, not 0, when there is no eligible history;**
+  - **`ValueError` on `h ≤ 0` or a null `ts`.**
+
+  Code will live in `src/features/behavioural.py` (`decay_weights`, `recency_weighted_profile`).
+  The oracle is a 20-event, 3-user toy log in `tests/test_behavioural_features.py`, with every
+  expected value hand-computed.
+- Why:
+  - *Time decay over position decay:* A1's `recency_pool` decays by list position, so two clicks a
+    minute apart and two clicks a week apart get the same weights. That is not recency, and the
+    out-of-order test is there to catch it.
+  - *NaN over 0:* 0 would conflate "never read this category" with "never read anything", and
+    both GBDT options handle missing values natively.
+  - *Oracle first:* `CLAUDE.md` rule 2. The implementation is deliberately held back so the tests
+    are seen failing first.
+- Red state, measured: the new file gives 2 passed (oracle self-checks) and 14 failed, all with
+  `ModuleNotFoundError: No module named 'src.features.behavioural'`. The other 212 tests are
+  unchanged and pass. Command: `PYTHONPATH=. .venv/bin/pytest tests/test_behavioural_features.py -q`.
+- Found while specifying: **MIND history has no click timestamps.** `behaviors.history` is an id
+  list; only clicks inside impressions carry `time`. EB-NeRD has per-click times
+  (`history.impression_time_fixed`). Recorded as open decision **P1-D1** in `SPEC.md` §11.1
+  (recommendation: stamp MIND history clicks with the split's window start, a leak-free upper
+  bound). The half-life value is open as **P1-D2** (grid 6 h / 24 h / 72 h / ∞; ∞ is the
+  no-decay baseline).
+- Alternatives rejected: a decayed *embedding* profile as the first feature (harder to hand-compute,
+  so a weaker oracle; it can reuse `decay_weights` later); rejecting out-of-order input like A1's
+  `RollingCounts` (unnecessary, since the math never depends on order).
+- Affects: `SPEC.md` §11 (new), `tests/test_behavioural_features.py` (new); `src/features/`
+  deliberately untouched.
+- Status: active
+
+### C-007 · `recency_weighted_profile` implemented: out-of-order handling and NaN default confirmed by mutation check
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code)
+- Decision: the implementation in `src/features/behavioural.py` (`decay_weights`,
+  `recency_weighted_profile`, `SERVING_OK`) is accepted. It keeps C-006's contract:
+  - out-of-order events are **handled by timestamp**, not rejected;
+  - no eligible history returns **NaN**;
+  - the time boundary is the strict `ts < t`.
+
+  This entry adds the evidence that the oracle actually enforces that contract. (C-006 already
+  recorded the out-of-order and NaN choices; the log is append-only, so this entry confirms them
+  rather than re-deciding.)
+- Why: a test that has only ever passed proves nothing. The oracle was first run against planted
+  bugs.
+  - **Combined mutant.** All three bugs at once, via `make test`: 10 failed, 218 passed.
+  - **Each bug alone.** Inserted separately into an otherwise-correct implementation:
+
+    | Planted bug | Failing tests | Dedicated test that catches it |
+    |---|---|---|
+    | `ts <= t` | 8 / 16 | `test_event_at_exactly_t_is_excluded` |
+    | decay by list position | 6 / 16 | `test_out_of_order_…_not_row_order` |
+    | no `user_id` filter | 7 / 16 | `test_other_users_events_are_excluded` |
+    | control (no bug) | 0 / 16 | — |
+
+  Logs: session scratchpad `mutant_all3.log` and `mutants_isolated.log`. The driver script is
+  `isolate_mutants.py`, not committed; its three one-line mutations are listed in `SPEC.md` §11.1.
+- Result: `make test` gives **236 passed**, 0 failed, exit 0. That is 212 from A1, 16 original
+  oracle tests and 8 new fallback tests. The 6 warnings are A1's existing Polars deprecations in
+  `tests/test_no_leakage.py`.
+- Implementation notes worth knowing:
+  - Ages are computed in microseconds (`dt.total_microseconds() / 1e6`), because
+    `dt.total_seconds()` truncates to whole seconds, which would silently round sub-second ages
+    (verified: 1.5 s → `1`, `Int64`, on polars 1.43.2).
+  - Output is sorted by `ts`, then `article_id`, so equal timestamps still give a deterministic
+    order.
+  - `half_life` has **no default**: every caller must state it (P1-D2).
+- Observed in passing: the boundary mutant also fails `test_other_users_events_are_excluded`,
+  because that test checks U1's rows against the eligible set, which also excludes U1's own
+  at-*t* event. The overlap is harmless, but it means that test's name undersells what it checks.
+- Affects: `src/features/behavioural.py` (new), `tests/test_behavioural_features.py` (+8 tests,
+  docstring), `SPEC.md` §11.1
+- Status: active
+
+### C-008 · P1-D1 decided (MIND timestamp fallback); P1-D2 half-life grid fixed
+- Date / author: 2026-09-11 · Anurag Kaushal (Claude Code); decision by Anurag
+- Decision, **P1-D1**:
+  - Clicks with a null `ts` (MIND history) are stamped with their split's start, but only through
+    the explicit keyword `untimed_ts`. Without it, a null `ts` still raises `ValueError`. The
+    fallback is an opt-in, never a silent default.
+  - Split starts: `MINDsmall_train` 2019-11-09 00:00, `MINDsmall_dev` 2019-11-15 00:00,
+    `MINDlarge_test` 2019-11-16 00:00.
+- Decision, **P1-D2**:
+  - The half-life grid is h ∈ {6 h, 24 h, 72 h, ∞}, with ∞ as the no-decay baseline, selected
+    under the gap-aware protocol (`SPEC.md` §7).
+  - The value is not chosen yet: it needs the batch path to run the grid on real data.
+- Why (measured 2026-09-11 from `behaviors.tsv`; log: scratchpad `mind_history_check.log`):
+  - **The stamp is strictly before every impression.** The first impressions are 19 s, 1 s and
+    5 s after midnight (train / dev / test).
+  - **The stamp is an upper bound on the true click time.** MIND history is a frozen snapshot: it
+    varies within a split for **0** of 33,617 / 14,826 / 484,059 repeat users (train / dev / test),
+    and is identical in train and dev for **all 5,943** users present in both. It predates 9 Nov.
+  - **No leak, even with a wrong stamp.** A stamp at or after `t` is excluded by the strict boundary,
+    as tested.
+  - **Per-split stamps keep history ages comparable:** 0–6 days in train, 0–7 in test. One global
+    9 Nov stamp would be truer, but would age test history to 7–14 days against 0–6 in training,
+    which is the A1 submission-3 skew.
+- **Consequence that limits the feature (important for D4 and the note):**
+  - All MIND history clicks share one stamp, so they share one weight, and normalisation cancels
+    it. **On MIND, the history-only recency profile equals the undecayed category distribution for
+    every h**, pinned by `test_history_only_profile_does_not_depend_on_half_life`.
+  - Decay would need timed in-window clicks, which are unlabelled in the MIND test split, so using
+    them in training recreates the skew.
+  - **The half-life ablation, and "freshness weighting" as the D4 principled change, are therefore
+    only testable on EB-NeRD.** Don't claim a MIND decay effect.
+- Alternatives rejected: (b) timed in-window clicks only (discards all history and creates
+  train/serve skew); (c) position-based decay for MIND (a second definition, and the weakness
+  C-006 was written to avoid); a single global stamp (skew, as above).
+- Affects: `src/features/behavioural.py` (`untimed_ts`), `SPEC.md` §11.1 (P1-D1/P1-D2 rewritten
+  with the measurements), `tests/test_behavioural_features.py` (`TestMindUntimedFallback`)
 - Status: active
 
 ---
