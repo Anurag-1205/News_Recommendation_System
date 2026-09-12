@@ -521,3 +521,84 @@ human-written code. Both team members append here. Chat exports are submitted wi
 - Risk recorded in C-019: Aayush now carries P3.1, P3.4a and P4 over 12–17 Sep, and is blocked
   until the Phase 1/2 commits reach GitHub. As of 22:10 on 11 Sep, `git ls-remote` showed only
   `779cad4`.
+
+### 2026-09-12 · Aayush Pandey · Claude Code (Opus 5) · P0 onboarding: clean-clone check on Aayush's machine
+- Asked: "my friend anurag has made this project ... before doing the task i want to setup the
+  project such that it runs on my machine. check the plan, context and claude md files and
+  everything in this project. and do tell me what is required for setup atleast as of now", then
+  "yes proceed".
+- Produced (AI-generated, reviewed by Aayush):
+  - `.venv/` built from the pinned `requirements.txt` (gitignored; nothing to commit).
+  - `RESULTS.md`: one row in the verification table (clean-clone result).
+  - `CONTEXT.md` §1: current state overwritten (origin now matches local HEAD; P0 progress; the
+    stale "blocked until Anurag pushes" note removed).
+  - This entry.
+- Verified by: `PYTHONPATH=. .venv/bin/pytest tests/ -v` → **318 passed, 0 failed** (the count
+  CONTEXT.md §1 predicted); `.venv/bin/pip check` clean; `pip freeze` diffed against the 65 pins
+  with no difference (the C-011 reproducibility check, repeated on a second machine).
+- Failed / corrected:
+  - **`make env` could not run as written.** The laptop has no `make`, and `python3 -m venv` fails
+    because `python3.12-venv` (ensurepip) is not installed; `sudo` was not available to the agent.
+    Workaround: `uv venv .venv --python /usr/bin/python3 --seed`, then the venv's own
+    `.venv/bin/pip install -r requirements.txt`, which is the Makefile's recipe minus the venv
+    creation step. Same interpreter (3.12.3), same pins, so the result is what `make env` builds.
+    Aayush then supplied sudo access; `make` and `python3.12-venv` were installed and `make test`
+    re-run through the Makefile: 318 passed. `make env` accepted the existing `.venv` without
+    rebuilding it.
+  - `pip install` took ~15 min on the campus link; the agent checked progress via the pip cache
+    rather than restarting it.
+  - Pre-existing, not fixed: `huggingface-hub[cli]==1.28.0` warns that the `cli` extra does not
+    exist in 1.x (the `hf` CLI ships by default). Harmless; left for Anurag since it is a pin.
+  - Not done in this session (open in `CONTEXT.md` §1): HF token, data fetch,
+    `external/ebnerd-benchmark` clone.
+- Kaggle verification (same session, after Aayush downloaded an API token):
+  - Asked: "i have downloaded the kaggle.json, after that tell me what should i do?" / "yes its
+    phone verified".
+  - Produced (AI-generated): `scripts/kaggle/gpu_check/{gpu_check.py,kernel-metadata.json}`, a
+    script kernel that asserts 2× T4, times a 4096² matmul in fp32 and fp16 per GPU, and runs an
+    autocast + `GradScaler` backward pass; exits non-zero on failure. `RESULTS.md` P0 section;
+    `CONTEXT.md` C-020 and §1.
+  - Verified by: `kaggle kernels status` → COMPLETE; the downloaded log ends in `RESULT PASS`
+    (numbers in `RESULTS.md` P0). `kaggle quota` → 30 h GPU/week.
+  - Failed / corrected: the agent's status-poll loop matched the lowercase word "complete" but
+    the CLI prints `KernelWorkerStatus.COMPLETE`, so it kept polling after the run finished and
+    had to be killed by hand. The first version of the script called `float(loss)` on a tensor
+    with `requires_grad`, which raised a `UserWarning` in the log; fixed to `loss.detach()`
+    after the run (the recorded numbers are from the pre-fix version; the change does not affect
+    them). The token file's contents were never printed; only its key names and the username.
+
+### 2026-09-13 · Aayush Pandey · Claude Code (Opus 5) · P0 step 7: NRMS smoke test on Kaggle; polars shim; C-013 review
+- Asked: "do all of my p0 tasks" (after "what is left in P0 and how can we do it?"); on C-013,
+  "both looks good to me, what do you feel?".
+- Produced (AI-generated, reviewed by Aayush):
+  - `external/ebnerd-benchmark` cloned (gitignored), commit pinned in C-021.
+  - `src/baselines/ebrec_compat.py`: two drop-in replacements for benchmark polars helpers plus
+    `install()`; `tests/test_ebrec_compat.py`: 8 tests, expected values copied from the
+    benchmark's own docstrings (the oracle existed before the shim was written).
+  - `scripts/kaggle/nrms_smoke/`: the kernel (`nrms_smoke.py`), its metadata, and
+    `inline_shim.py`, which embeds the shim into the kernel as base64 (a script kernel uploads
+    one file, and the shim is not on GitHub until this is pushed).
+  - `RESULTS.md` P0 smoke-test table; `CONTEXT.md` C-021, C-022 and §1; this entry.
+  - `make fetch-small` run to completion (demo + small zips, ~1.5 h on the campus link).
+- Verified by: kernel v3 `RESULT PASS` with metrics printed by the benchmark's own
+  `MetricEvaluator` (`RESULTS.md` P0); `make test` → 323 passed (318 + 5 shim tests at the
+  time; 326 with the three `add_prediction_scores` tests added after run v2); an identity check
+  that the base64 inline copy decodes to exactly `src/baselines/ebrec_compat.py`.
+- Failed / corrected (all caught by the stage markers in the kernel log):
+  - **Run v1** died in `map_list_article_id_to_value`: polars 1.35 on the Kaggle image rejects
+    `replace` with list-valued dicts. The agent's first mixed-precision probe ran the dataloader
+    *inside* the `try`, so this data bug was misreported as `MIXED_PRECISION_FAILED`. Fixed by
+    building the probe batch before the `try`.
+  - **Run v2** trained fine (271 s/epoch) and then died in `add_prediction_scores`: `drop` of a
+    column the frame never had, tolerated by polars 0.20, an error in 1.x. Second shim function.
+  - A test asserting "the original breaks on this polars" failed locally: polars 1.43 (our venv)
+    accepts the nested `replace` that 1.35 rejects. The test was dropped and the docstring made
+    version-specific instead of claiming a general breakage.
+  - Embedding the shim source in the kernel with `r"""…"""` failed to compile (the shim's
+    own docstring closes the literal); `'''` had the same quoting problem inside the refresh
+    script; base64 was the fix.
+  - The first status-poll loop again needed the uppercase `COMPLETE`; `kaggle kernels output`
+    downloads the whole working directory (the clone and data), so logs are fetched with
+    `kaggle kernels logs` instead.
+  - Not done: `make fetch-mind` (needs Aayush's HF login), `make data` (needs
+    `ebnerd_testset.zip`), P0 steps 4/5/6/8 (need Anurag).

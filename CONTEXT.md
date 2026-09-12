@@ -16,18 +16,18 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-11 by Anurag (agent: Claude Code)_
+_Last updated: 2026-09-13 by Aayush (agent: Claude Code)_
 
 | | |
 |---|---|
-| Branch | `a2-click-logs`, from `main` at `be15ee6` (A1 final) |
-| Phase | **P1 done** (C-014). **P2 locked** (C-018) in `src/rerank/config.FINAL`: EB-NeRD lambdarank without dwell, AUC 0.6728; MIND pointwise A1 v4, AUC 0.6747. Committed in the Phase 2 commit ("P2: two-stage reranker locked …"), which also carries the C-019 roster change. Open for Q2: D1 framing (b), retrieving a top-K from the corpus. **`54cf185` and `87c87cf` were NOT on GitHub** at 22:10 on 11 Sep (`git ls-remote` showed `779cad4`), so Aayush is blocked until Anurag pushes. P0 exit-gate items owned by Aayush are still open. See `PLAN.md` §3 |
-| Team | Revised in **C-019**. **Anurag Kaushal**: P1 and P2 (done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS on Kaggle, paired bootstrap, the change and its ablation), P4, P5 joint, P6 joint. Anurag reviews every Q3 "beats" claim |
-| Anurag Kaushal | **Committed but NOT on GitHub:** `54cf185`, `87c87cf`, and the Phase 2 commit (which includes C-019). **Push all three first** (Aayush is blocked). Next: P5 (joint), proposed as `make eval` plus the Kaggle submission pipeline for `config.FINAL`; D1 framing (b); reviewing Aayush's Q3 claims |
-| Aayush Pandey | Not started, and **blocked until Anurag pushes**. Now: P0 (`git pull`, `make env && make test`, **318 expected**; Kaggle check on Aayush's account). Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → NRMS on both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4. P5 joint |
-| Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004) |
+| Branch | `a2-click-logs`, from `main` at `be15ee6` (A1 final). **Origin is at `f44b108` = local HEAD** (checked with `git ls-remote` on 12 Sep), so the 11 Sep "not on GitHub" block is cleared |
+| Phase | **P1 done** (C-014). **P2 locked** (C-018) in `src/rerank/config.FINAL`: EB-NeRD lambdarank without dwell, AUC 0.6728; MIND pointwise A1 v4, AUC 0.6747. Open for Q2: D1 framing (b). **P0 clean-clone check passed on Aayush's machine: 318 passed** (`RESULTS.md`, verification table). See `PLAN.md` §3 |
+| Team | Per **C-019**. **Anurag Kaushal**: P1 and P2 (done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS on Kaggle, paired bootstrap, the change and its ablation), P4, P5 joint, P6 joint. Anurag reviews every Q3 "beats" claim |
+| Anurag Kaushal | Next: P5 (joint), proposed as `make eval` plus the Kaggle submission pipeline for `config.FINAL`; D1 framing (b); reviewing Aayush's Q3 claims |
+| Aayush Pandey | **P0 in progress.** Done: pull, `.venv` from the pinned `requirements.txt`, suite green (318). `make` and `python3.12-venv` installed afterwards and `make test` re-run green (the venv itself was built with `uv venv --seed` + the venv's own `pip`, same interpreter and pins as `make env`). **Kaggle verified** (C-020): CLI as `aayushpandey18602`, 2× T4 + fp16 PASS, 30 h/week quota. **NRMS smoke test PASSED on Kaggle** (C-021, C-022; `RESULTS.md` P0): `external/ebnerd-benchmark` at `5164e2c`, TF/Keras, float32, 273 s/epoch on demo. `make fetch-small` done (demo + small zips). Still open: HF token → `make fetch-mind`; `ebnerd_testset.zip` (from `make fetch-large`, 1.5 GB) is required before `make data` builds EB-NeRD at all (`build_pipeline.py` returns early without it). **C-013's two corrections reviewed and agreed by Aayush (12 Sep)**: `session_len` unsafe; `n_prior_clicks_in_session` omitted (not zero-filled) for the submission model. Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4 |
+| Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004). Both accounts verified. Aayush's laptop: Python 3.12.3, 15 GB RAM, no GPU, 36 GB free disk |
 | Blocked on | team decisions D1–D9 in `PLAN.md` §5; the scores-file format (`PLAN.md` §2) must be agreed and pinned in `SPEC.md` |
-| Next up | **Anurag:** push the three local commits, then check that `git ls-remote origin a2-click-logs` shows the same hash as `git rev-parse HEAD`. **Aayush:** pull, `make test` (318), review C-013's two corrections, start P3.1 on Kaggle. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
+| Next up | **Aayush:** P0 exit gate on Aayush's side is met (tests green, Kaggle verified, NRMS on demo). Remaining P0 needs Anurag: Codabench teams (step 4), Kaggle datasets for the large files (5–6), the scores-file format (8). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
 
 ---
 
@@ -681,6 +681,70 @@ Entry format:
     table).
 - Anurag's other open item: Q2.1 retrieval framing (b) (C-018).
 - Affects: `PLAN.md` (§0 team row and consequences, §2, §3, P3/P5 headings, P0 steps 6–7), `CONTEXT.md` §1
+- Status: active
+
+### C-020 · Aayush's Kaggle account verified; GPU budget for P3 is 30 h/week, refreshing 19 Sep
+- Date / author: 2026-09-12 · Aayush Pandey (Claude Code)
+- Decision: P0 step 3 closed for Aayush's account. `~/.kaggle/kaggle.json` (mode 600) authenticates
+  the CLI as `aayushpandey18602`; the kernel `scripts/kaggle/gpu_check/` ran on 2× Tesla T4 with
+  fp16 autocast + `GradScaler` and passed. Kaggle's image is torch 2.10.0+cu128, so NRMS runs
+  against that torch, not a version we pin.
+- Why: numbers in `RESULTS.md` P0. The check is a kernel in the repo, pushed by the CLI with
+  `--accelerator NvidiaTeslaT4`, so it can be re-run on either account.
+- Planning consequence: `kaggle quota` shows **30 h GPU per week**, refreshing 2026-09-19 00:00.
+  P3.1 (NRMS on EB-NeRD and MIND), the change and its ablation all draw from this one budget in the
+  week of 12–18 Sep, and the refresh lands one day before the deadline. NRMS runs are therefore
+  sized to the demo/small data first, and every full run writes resumable chunks (C-004).
+- Alternatives rejected: verifying through the Kaggle UI only (not reproducible, and the CLI is
+  what P3 uses).
+- Affects: `scripts/kaggle/gpu_check/` (new), `RESULTS.md` P0, `PLAN.md` P0 step 3
+- Status: active
+
+### C-021 · `ebnerd-benchmark` pinned at `5164e2c`; it runs on Kaggle through a two-function polars shim, not its own pins
+- Date / author: 2026-09-13 · Aayush Pandey (Claude Code)
+- Decision: the NRMS baseline is `ebanalyse/ebnerd-benchmark` at commit
+  `5164e2ce7c92b99cbcb853d5f804cc95f0232b2f` (2026-03-16, "dependencies updates"), cloned into
+  `external/ebnerd-benchmark` (gitignored). On Kaggle it runs against the image's own
+  TensorFlow 2.20 / Keras 3.13 / polars 1.35 / numpy 2.0 / transformers 5.0, with
+  `src/baselines/ebrec_compat.install()` replacing two of its polars helpers.
+- Why: the benchmark pins `polars==0.20.8`, `numpy<1.26.1`, `scikit-learn==1.4.0`,
+  `tensorflow<2.22`, `torch<2.3`: incompatible with our venv (polars 1.43, numpy 2.5) and with the
+  Kaggle image. Installing its pins on Kaggle would downgrade numpy under TF. Smoke run v1 died in
+  `map_list_article_id_to_value` (polars 1.35 rejects `replace` with list-valued dicts) and v2 in
+  `add_prediction_scores` (`drop` of a column the frame never had; 0.20 ignored it, 1.x raises).
+  Both shims keep the original signatures and are held to the benchmark's own docstring examples
+  in `tests/test_ebrec_compat.py` (8 tests). Nothing in the model, loss, sampling or metrics is
+  touched.
+- Framework finding (P0.7 / D3): NRMS here is **TensorFlow/Keras**, adapted from Microsoft
+  `recommenders`. So the same implementation can serve MIND only through its own data loader,
+  which reads EB-NeRD's `behaviors/history/articles` parquet layout: MIND would need a converter.
+  D3 stays open until P3.1 decides between that converter and a separate MIND NRMS.
+- Reproduction-gap candidate, recorded for P3.1: `examples/reproducibility_scripts/ebnerd_nrms.py`
+  computes the xlm-roberta word embeddings and then builds `NRMSModel(hparams, seed)` **without
+  passing them**, so the published recipe trains a random 32,000×300 embedding table indexed by
+  xlm-roberta token ids (vocab 250,002). The quick-start passes them. Our runs pass them.
+- Alternatives rejected: `pip install polars==0.20.8` inside the kernel (a 0.20-era wheel under
+  numpy 2.0 is untested and would make Kaggle's environment diverge from the image both accounts
+  share); patching the benchmark checkout (not reproducible from a clean clone).
+- Affects: `external/ebnerd-benchmark` (pin), `src/baselines/ebrec_compat.py` (new),
+  `tests/test_ebrec_compat.py` (new), `scripts/kaggle/nrms_smoke/` (new)
+- Status: active
+
+### C-022 · NRMS trains in float32 on the T4: Keras `mixed_float16` fails in the benchmark's `SelfAttention`
+- Date / author: 2026-09-13 · Aayush Pandey (Claude Code)
+- Decision: the NRMS baseline runs with Keras's default float32 policy. The "fp16 autocast +
+  GradScaler" default in `CLAUDE.md` §6 is a PyTorch recipe and does not carry over unchanged.
+- Why: with `tf.keras.mixed_precision.set_global_policy("mixed_float16")` the first training
+  batch raises `TypeError` in `SelfAttention.call()` ("`x` and `y` must have the same dtype, got
+  tf.float16 != tf.float32"): the benchmark's custom attention layers create float32 weights and
+  matmul them against float16 activations. Fixing that means editing the baseline's layers, which
+  is out of scope for a *reproduction*. Smoke run v2 (`RESULTS.md` P0): one epoch on EB-NeRD demo,
+  45,614 train impressions, npratio 4, batch 32, took **271 s in float32** on one T4 (190 ms/step),
+  so float32 is affordable on demo/small; the cost at `ebnerd_large` is measured before deciding.
+- Alternatives rejected for now: casting inside `AttLayer2`/`SelfAttention` (an edit to the
+  baseline, possible later as an explicitly labelled variant if the quota demands it); running
+  on P100 (no tensor cores either way).
+- Affects: `scripts/kaggle/nrms_smoke/nrms_smoke.py` (policy probe with fallback), P3.1 budget
 - Status: active
 
 ---

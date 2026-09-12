@@ -1,0 +1,15 @@
+{
+  "id": "aayushpandey18602/a2-gpu-check",
+  "title": "a2-gpu-check",
+  "code_file": "gpu_check.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

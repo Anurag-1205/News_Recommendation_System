@@ -17,6 +17,57 @@ facts that A2 depends on are summarised in `CONTEXT.md` §3.
 
 ---
 
+## P0 · Setup verification
+
+### Kaggle GPU check on Aayush's account — 2026-09-12, Aayush Pandey
+
+Command: `.venv/bin/kaggle kernels push -p scripts/kaggle/gpu_check --accelerator NvidiaTeslaT4`,
+then `.venv/bin/kaggle kernels output aayushpandey18602/a2-gpu-check -p <dir>`. Kernel ran
+23:29–23:30 IST, status COMPLETE, `RESULT PASS`.
+
+| Fact | Value |
+|---|---|
+| Kaggle image | torch 2.10.0+cu128, CUDA 12.8, Python 3.12 |
+| GPUs seen | `device_count 2`; both `Tesla T4, 15360 MiB` |
+| 4096² matmul, gpu0 | fp32 50.08 ms · fp16 17.59 ms (2.8×) |
+| 4096² matmul, gpu1 | fp32 39.86 ms · fp16 4.35 ms (9.2×; gpu0's fp16 number likely includes cuBLAS warm-up) |
+| autocast fp16 + `GradScaler` backward | finite gradients, loss 0.332 |
+| Weekly GPU quota (`kaggle quota`) | **30 h**, 0 used, refreshes **2026-09-19 00:00** |
+
+The 30 h/week is the budget for all of P3.1 (NRMS on both datasets) plus the ablation runs, and
+it refreshes one day before the deadline. Anurag's account carries the P5 inference (C-019).
+
+### NRMS smoke test on EB-NeRD demo, Kaggle T4 — 2026-09-13, Aayush Pandey (P0 step 7)
+
+Command: `.venv/bin/kaggle kernels push -p scripts/kaggle/nrms_smoke --accelerator NvidiaTeslaT4`;
+log via `.venv/bin/kaggle kernels logs aayushpandey18602/a2-nrms-smoke`. Benchmark commit
+`5164e2c`, demo pulled from the official S3 bucket inside the kernel, `src/baselines/ebrec_compat`
+patched in (C-021). Recipe: train ∪ validation of demo, npratio 4, history 20, title length 30,
+xlm-roberta-**base** word embeddings (the published recipe uses -large), batch 32, **1 epoch**,
+seed 123 / model seed 42, last day (2023-05-31) held out. Three runs; v1 and v2 failed inside the
+benchmark's polars helpers and are recorded in C-021.
+
+| Fact (run v3, `RESULT PASS`) | Value |
+|---|---|
+| Kaggle image | TF 2.20.0, Keras 3.13.2, polars 1.35.2, numpy 2.0.2, transformers 5.0.0; 2× T4 visible to TF |
+| Impressions after wu2019 sampling | train 45,614 · held-out day 4,779 |
+| Parameters | 193,563,936 (192.0M is the 250,002 × 768 embedding table) |
+| Precision | `mixed_float16` **fails** in `SelfAttention.call()` (dtype mismatch) → **float32** (C-022) |
+| One epoch, one T4 | **273 s**, 1,426 steps, 192 ms/step; wall time of the whole kernel 441 s |
+| Keras in-training metrics | train AUC 0.633, loss 1.527 · val AUC 0.583, val loss 1.594 |
+| Benchmark `MetricEvaluator` on the held-out day, sampled 5-candidate slates | **AUC 0.5592 · MRR 0.5329 · nDCG@5 0.6469 · nDCG@10 0.6469** (equal because slates have 5 items) |
+| Same seed, run v2 (which reached the end of training) | val AUC 0.5907 vs 0.5827 in v3: **±0.01 run-to-run on GPU with fixed seeds** |
+| GPU quota consumed by P0 (3 smoke runs + GPU check) | 0.27 h of 30 h |
+
+What this settles: the framework (TF/Keras), that the code runs on the shared Kaggle image with
+the shim, the float32 cost per epoch on demo, and that the exit-gate item "NRMS runs end to end
+on demo on Kaggle" is met. What it does not: these are **not** reproduction numbers (1 epoch,
+-base embeddings, sampled slates rather than full validation slates). P3.1 must (a) evaluate on
+the full validation slates, (b) fix determinism (`TF_DETERMINISTIC_OPS=1`) or report over seeds,
+and (c) run the published recipe on `ebnerd_small`.
+
+---
+
 ## Q1 · Behavioural features
 
 **No feature-quality number exists yet.** There is no AUC, no ablation and no feature importance,
@@ -53,6 +104,7 @@ the full split).
 |---|---|---|
 | Full suite, project venv | **279 passed** at the Phase 1.2 commit; **310 passed** after Phase 2 (lambdarank, rerank modules) | `make test` |
 | Full suite, a *fresh* venv built from the pinned `requirements.txt` | **279 passed** with 64 pins (C-011); **310 passed** with 65 pins, lightgbm 4.7.0 added (C-016); `pip check` clean and `pip freeze` equal to the pins both times | see C-011, C-016 |
+| Full suite, **clean clone on Aayush's machine** (P0 step 2), 2026-09-12 | **318 passed**, 0 failed, 6.48 s; `pip check` clean; `pip freeze` equal to the 65 pins. Python 3.12.3, 15 GB RAM, no GPU | `make test` (318 passed again after `make` was installed; the first run used the recipe directly, `PYTHONPATH=. .venv/bin/pytest tests/ -v`) |
 | Planted bugs, each run alone in an otherwise-correct implementation | every one fails its dedicated test (per-bug tables in `SPEC.md` §11.1–§11.8) | scratch scripts, logged in `AI_USAGE.md` |
 
 ### Half-life grid (P1-D2) — EB-NeRD validation, 2026-09-11, Anurag Kaushal
