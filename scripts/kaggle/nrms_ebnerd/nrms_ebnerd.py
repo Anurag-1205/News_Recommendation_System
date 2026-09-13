@@ -221,7 +221,7 @@ per_imp = {k: np.asarray(v, float) for k, v in per_impression_metrics(rows).item
 ci = bootstrap_evaluate(per_imp)
 ours = {k: float(np.nanmean(v)) for k, v in per_imp.items()}
 print("METRICS_OURS", json.dumps(ours))
-print("METRICS_CI", json.dumps({k: [c.value, c.low, c.high] for k, c in ci.items()}))
+print("METRICS_CI", json.dumps({k: [c.mean, c.lo, c.hi] for k, c in ci.items()}))
 bench = MetricEvaluator(labels=val_full["labels"].to_list(), predictions=nested["scores"].to_list(),
                         metric_functions=[AucScore(), MrrScore(), NdcgScore(k=5), NdcgScore(k=10)]).evaluate().evaluations
 print("METRICS_BENCH", json.dumps(bench))
