@@ -109,10 +109,12 @@ class NRMSFreshModel(NRMSModel):
         self.userencoder = self._build_userencoder(titleencoder)
         self.newsencoder = titleencoder
 
-        self.g = keras.Sequential([
-            layers.Dense(8, activation="relu", name="fresh_hidden", kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed)),
-            layers.Dense(1, name="fresh_out", kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed)),
-        ], name="fresh_term")
+        # g as a functional model with an explicit Input: in TF1 graph mode a Sequential used only
+        # through TimeDistributed has no standalone input, so `g.predict` (run_fast_eval) fails.
+        g_in = keras.Input(shape=(FRESH_DIM,), dtype="float32", name="fresh_in")
+        g_h = layers.Dense(8, activation="relu", name="fresh_hidden", kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed))(g_in)
+        g_out = layers.Dense(1, name="fresh_out", kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed))(g_h)
+        self.g = keras.Model(g_in, g_out, name="fresh_term")
 
         user_present = self.userencoder(his_input_title)
         news_present = layers.TimeDistributed(self.newsencoder)(pred_input_title)
@@ -136,10 +138,6 @@ class NRMSFreshModel(NRMSModel):
     def zero_g(self):
         out = self.g.get_layer("fresh_out")
         out.set_weights([np.zeros_like(out.get_weights()[0]), np.zeros_like(out.get_weights()[1])])
-
-    def copy_encoders_from(self, baseline: NRMSModel):
-        self.newsencoder.set_weights(baseline.newsencoder.get_weights())
-        self.userencoder.set_weights(baseline.userencoder.get_weights())
 
     def g_values(self, pairs: np.ndarray) -> np.ndarray:
         """g on an (n, 2) array of (x, unknown) pairs, in one predict call."""

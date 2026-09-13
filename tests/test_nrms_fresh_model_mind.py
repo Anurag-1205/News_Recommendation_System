@@ -18,8 +18,6 @@ if not all(os.environ.get(k) for k in ("NRMS_YAML", "NRMS_EMB", "NRMS_WDICT", "N
     pytest.skip("MIND utils env vars not set", allow_module_level=True)
 
 from recommenders.models.newsrec.newsrec_utils import prepare_hparams   # noqa: E402
-from recommenders.models.newsrec.models.nrms import NRMSModel            # noqa: E402
-from recommenders.models.newsrec.io.mind_iterator import MINDIterator    # noqa: E402
 from src.baselines.nrms_fresh_rec import FRESH_DIM, MINDFreshIterator, NRMSFreshModel  # noqa: E402
 
 
@@ -36,14 +34,26 @@ def _inputs(rng, hp, batch=3):
     return his, pred, fresh
 
 
+def _softmax(z):
+    z = z - z.max(-1, keepdims=True); e = np.exp(z); return e / e.sum(-1, keepdims=True)
+
+
 def test_additive_identity_g_zero_reproduces_baseline():
+    """With g ≡ 0 the head is exactly the baseline's: softmax(user · news) for training,
+    sigmoid(user · news) for scoring — recomputed in numpy from the model's own encoders (which
+    are the package's `_build_newsencoder`/`_build_userencoder`, untouched). One model only:
+    each recommenders model opens its own TF1 session, so two cannot share weights in a test."""
     hp = _hparams()
-    base = NRMSModel(hp, MINDIterator, seed=42)
     var = NRMSFreshModel(hp, MINDFreshIterator, seed=42)
-    var.copy_encoders_from(base); var.zero_g()
+    var.zero_g()
     his, pred, fresh = _inputs(np.random.default_rng(0), hp)
-    np.testing.assert_allclose(var.model.predict([his, pred, fresh]), base.model.predict([his, pred]), atol=1e-6)
-    np.testing.assert_allclose(var.scorer.predict([his, pred[:, :1], fresh[:, :1]]), base.scorer.predict([his, pred[:, :1]]), atol=1e-6)
+    user = var.userencoder.predict(his)                                              # (b, d)
+    news = var.newsencoder.predict(pred.reshape(-1, hp.title_size)).reshape(pred.shape[0], pred.shape[1], -1)
+    dot = np.einsum("bnd,bd->bn", news, user)
+    np.testing.assert_allclose(var.model.predict([his, pred, fresh]), _softmax(dot), atol=1e-5)
+    np.testing.assert_allclose(var.scorer.predict([his, pred[:, :1], fresh[:, :1]]).reshape(-1),
+                               1 / (1 + np.exp(-dot[:, 0])), atol=1e-5)
+    assert np.all(var.g_values(fresh.reshape(-1, FRESH_DIM)) == 0.0)
 
 
 def test_freshness_term_is_per_candidate():
@@ -71,8 +81,8 @@ def test_iterator_yields_fresh_batch_and_mask(tmp_path):
     b = batches[0]
     assert b["candidate_fresh_batch"].shape == (2, hp.npratio + 1, FRESH_DIM)
     # first sample of each line is its positive: row 0 → N3 (0.3), row 1 → N5 (0.5); order may be shuffled
-    firsts = sorted(b["candidate_fresh_batch"][:, 0, 0].round(3).tolist())
-    assert firsts == [0.3, 0.5]
+    firsts = sorted(b["candidate_fresh_batch"][:, 0, 0].tolist())
+    assert firsts == pytest.approx([0.3, 0.5], abs=1e-6)
     it.mask = True
     bm = next(it.load_data_from_file(str(news), str(beh)))
     assert (bm["candidate_fresh_batch"].reshape(-1, FRESH_DIM) == np.array([0.0, 1.0], dtype="float32")).all()
