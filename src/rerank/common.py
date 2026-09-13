@@ -5,7 +5,7 @@
   `ABSENT_FROM_TEST_FILE`. Scripts call this rather than listing exclusions themselves.
 * `evaluate` / `per_impression` — a scored candidate frame -> A1's per-impression metrics and
   bootstrap CIs, unchanged, so A2 numbers are comparable with A1's.
-* `paired_delta` — a minimal paired bootstrap on per-impression differences. **Provisional**: the
+* `paired_delta` — re-exported from `src.eval.bootstrap` (moved there in P3.4a, C-026). Was: the
   team's paired-bootstrap harness is Aayush's P3.4a and supersedes this (CONTEXT.md C-015).
 * `fit_gbdt` — A1's HistGradientBoostingClassifier with A1's hyperparameters, for comparability.
 * `fit_lambdarank` — the D2 model (CONTEXT.md C-016): LightGBM `lambdarank`, one query per
@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import polars as pl
 
-from src.eval.bootstrap import CI, bootstrap_metrics
+from src.eval.bootstrap import CI, bootstrap_metrics, paired_delta  # noqa: F401 — paired_delta re-exported
 from src.eval.metrics import per_impression_metrics
 from src.features.behavioural import (ABSENT_FROM_TEST_FILE, UNSAFE_FEATURES, category_match_batch,
                                       recency_profile_batch)
@@ -63,30 +63,6 @@ def per_impression(frame: pl.DataFrame, score_col: str) -> dict[str, np.ndarray]
 def evaluate(per_imp: dict[str, np.ndarray], *, iterations: int = 1000, seed: int = SEED) -> dict[str, CI]:
     """Bootstrap 95% CI per metric, resampling impressions (A1's `bootstrap_metrics`)."""
     return bootstrap_metrics({k: v.tolist() for k, v in per_imp.items()}, iterations=iterations, seed=seed)
-
-
-def paired_delta(a, b, *, iterations: int = 1000, confidence: float = 0.95, seed: int = SEED,
-                 block: int = 100) -> CI:
-    """Paired bootstrap of mean(b - a) over impressions.
-
-    Both systems are scored on the same impressions, so resampling the per-impression
-    *differences* cancels the impression-to-impression variance they share. That makes it far
-    tighter than comparing two independent CIs. Impressions where either value is NaN (AUC with a
-    single class) are dropped. Resampled in blocks to bound memory.
-    """
-    a, b = np.asarray(a, float), np.asarray(b, float)
-    if a.shape != b.shape:
-        raise ValueError(f"paired inputs differ in length: {a.shape} vs {b.shape}")
-    d = (b - a)[~(np.isnan(a) | np.isnan(b))]
-    n = len(d)
-    if n == 0:
-        return CI(float("nan"), float("nan"), float("nan"), 0, iterations)
-    rng = np.random.default_rng(seed)
-    means = np.concatenate([d[rng.integers(0, n, size=(min(block, iterations - s), n))].mean(axis=1)
-                            for s in range(0, iterations, block)])
-    alpha = (1 - confidence) / 2
-    lo, hi = np.quantile(means, [alpha, 1 - alpha])
-    return CI(float(d.mean()), float(lo), float(hi), n, iterations)
 
 
 def by_impression_chunks(frame: pl.DataFrame, chunk: int):

@@ -84,3 +84,27 @@ def compare(a: CI, b: CI, label_a: str = "A", label_b: str = "B") -> str:
                 f"no significant difference at this sample size")
     better, worse = (label_a, label_b) if a.mean > b.mean else (label_b, label_a)
     return f"{better} beats {worse}: {a} vs {b}, intervals disjoint"
+
+
+def paired_delta(a, b, *, iterations: int = 1000, confidence: float = 0.95, seed: int = 0,
+                 block: int = 100) -> CI:
+    """Paired bootstrap of mean(b - a) over impressions (A2 Q3.4; SPEC.md §14).
+
+    Both systems are scored on the same impressions, so resampling the per-impression
+    *differences* cancels the impression-to-impression variance they share. That makes it far
+    tighter than comparing two independent CIs. Impressions where either value is NaN (AUC with a
+    single class) are dropped. Resampled in blocks to bound memory.
+    """
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    if a.shape != b.shape:
+        raise ValueError(f"paired inputs differ in length: {a.shape} vs {b.shape}")
+    d = (b - a)[~(np.isnan(a) | np.isnan(b))]
+    n = len(d)
+    if n == 0:
+        return CI(float("nan"), float("nan"), float("nan"), 0, iterations)
+    rng = np.random.default_rng(seed)
+    means = np.concatenate([d[rng.integers(0, n, size=(min(block, iterations - s), n))].mean(axis=1)
+                            for s in range(0, iterations, block)])
+    alpha = (1 - confidence) / 2
+    lo, hi = np.quantile(means, [alpha, 1 - alpha])
+    return CI(float(d.mean()), float(lo), float(hi), n, iterations)
