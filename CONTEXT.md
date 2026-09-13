@@ -904,6 +904,36 @@ Entry format:
   (new), P3.2–3.4 schedule (target Tue 16 Sep)
 - Status: active
 
+### C-029 · Pre-run diagnostic (logged before any full-run number): freshness has almost no within-slate signal on EB-NeRD
+- Date / author: 2026-09-14 02:10 · Aayush Pandey's agent (Claude Code), while the variant demo checks ran
+- Finding: ranking each evaluation slate by the freshness feature alone (§15.2 `x`, unknown last),
+  with the reranker's own metric code:
+
+  | | fresher-first | older-first | within-slate range of x (median) |
+  |---|---|---|---|
+  | EB-NeRD small validation, 244,647 impressions | **AUC 0.5010**, MRR 0.3077 | AUC 0.4991 | 2.63 sd |
+  | MIND dev, 73,152 impressions | **AUC 0.5185**, MRR 0.2153 | AUC 0.4811 | 3.64 sd |
+
+  Freshness varies a lot *inside* EB-NeRD slates but does not separate the click from the rest.
+- Why it matters: C-028's motivation leaned on A1's `age_hours` **+0.125 permutation importance**
+  on EB-NeRD. That number is consistent with *pooled* importance — age separates impressions
+  (time of day, day of week) rather than candidates within one slate — the pitfall SPEC §12
+  names for pointwise models. An additive `g(freshness)` term in NRMS can only capture the
+  within-slate marginal signal measured here (≈ 0 on EB-NeRD, small on MIND).
+- Consequence: the pre-registered prediction (EB-NeRD Δ AUC ≥ +0.03) is now expected to
+  **fail**; MIND's small gain remains possible. The full runs go ahead unchanged — the test is
+  pre-registered, the budget is available (C-027), and a null with a measured mechanism is the
+  honest Q3 result (PLAN.md P3 step 4). If it is a null, the note should say what *would* have
+  a within-slate signal on EB-NeRD (the reranker's category profile: −0.009 AUC when removed,
+  RESULTS.md Q2) and that the P3.2 change was chosen on pooled evidence.
+- Also observed on the MIND demo check (ledger `a2-nrms-mind-fresh` v4): variant 0.5471 vs
+  baseline demo 0.5790, and masking the term at inference *raised* it to 0.5650 — a 1-epoch demo
+  signal in the same direction.
+- Command: the inline check in `AI_USAGE.md` (this session); to be turned into
+  `scripts/check_fresh_signal.py` with the outcome entry.
+- Affects: interpretation of P3.2–3.4; nothing in the runs
+- Status: active
+
 ---
 
 ## 3 · Inherited from A1 (facts, not decisions to revisit)
