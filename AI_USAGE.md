@@ -670,3 +670,26 @@ human-written code. Both team members append here. Chat exports are submitted wi
     not 45; MIND per-epoch eval ran 177 s with determinism on (165 s without).
   - Departure from CLAUDE.md §3, by Aayush's instruction: the agent commits on `a2-click-logs`;
     Aayush pushes.
+
+### 2026-09-14 · Aayush Pandey · Claude Code (Opus 5) · P3.4a: paired bootstrap harness; OOM incident
+- Asked: "lets move to P3.4a" (plan mode; approved), then, after the editor died: "the vscode
+  stopped accidentally, check this issue happens if process takes too much memory".
+- Produced (AI-generated, reviewed by Aayush; commits `d84330b`, `7f79a05`, + docs):
+  `src/eval/paired.py`, `scripts/paired_compare.py`, `make paired`; `paired_delta` moved to
+  `src/eval/bootstrap.py` (one-line re-export in Anurag's `common.py`); `tests/test_paired.py`
+  (12 oracles) and one identity test in `tests/test_bootstrap.py`; SPEC §14; C-026;
+  RESULTS.md Q3.4 validation rows.
+- Verified by: `make test` 348 passed; calibration coverage ≥ 90 %/200 trials; hand-computed
+  toy metrics; real-file checks (rescale Δ = 0 exactly; oracle boost every CI > 0); peak RSS
+  measured with `/usr/bin/time` (1.3 GB) and `resource` (0.42 GB for one `bootstrap_ci`).
+- Failed / corrected:
+  - The agent's first real-file test assumed N(0, 0.01) noise is a zero-Δ change; the harness
+    correctly found a significant AUC loss. The test was rewritten as a sensitivity check and the
+    zero-Δ case uses a rank-preserving rescale.
+  - The overlap-refusal test first built a strict subset, which the rule rightly allows; rebuilt
+    as a shifted-imp_row wrong-split case.
+  - MRR's noise loss is not significant at 20k while AUC's is; the assertion was scoped to AUC.
+  - **OOM kill** (exit 137, dmesg 01:16): `bootstrap_ci`'s one-shot (1,000 × 244,647) index
+    array. Fixed by blocked draws; a test proves bit identity with the old draw so no recorded
+    CI changed. Two background shell tasks from the crashed session were orphaned; nothing was
+    lost (the first comparison's record was already on disk).

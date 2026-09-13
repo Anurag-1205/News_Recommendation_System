@@ -27,7 +27,7 @@ _Last updated: 2026-09-14 by Aayush (agent: Claude Code)_
 | Aayush Pandey | **P0 in progress.** Done: pull, `.venv` from the pinned `requirements.txt`, suite green (318). `make` and `python3.12-venv` installed afterwards and `make test` re-run green (the venv itself was built with `uv venv --seed` + the venv's own `pip`, same interpreter and pins as `make env`). **Kaggle verified** (C-020): CLI as `aayushpandey18602`, 2× T4 + fp16 PASS, 30 h/week quota. **NRMS smoke test PASSED on Kaggle** (C-021, C-022; `RESULTS.md` P0): `external/ebnerd-benchmark` at `5164e2c`, TF/Keras, float32, 273 s/epoch on demo. **Local data complete (13 Sep):** `make fetch-small`, `make fetch-mind` (HF login as `aayush18602`), and the new `make fetch-testset` (1.63 GB, ~2 h on the campus link) all done; `make data` builds both datasets (MIND 95,071/31,624/30,270; EB-NeRD 192,884/32,225/7,778 train/val/test rows) and is idempotent on re-run. `data/` is 6 GB (raw 2.3, interim 3.6). **C-013's two corrections reviewed and agreed by Aayush (12 Sep)**: `session_len` unsafe; `n_prior_clicks_in_session` omitted (not zero-filled) for the submission model. Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4 |
 | Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004). Both accounts verified. Aayush's laptop: Python 3.12.3, 15 GB RAM, no GPU, 36 GB free disk |
 | Blocked on | team decisions D1–D9 in `PLAN.md` §5. **Scores-file format agreed 13 Sep** (Aayush proposed, Anurag amended: key `imp_row`, native `article_id`, 1-based `cand_position`, Float64 `score`, manifest with `framing`); Anurag lands it as `src/eval/scores.py` + SPEC entry + the C-NNN decision, with a round-trip acceptance test against RESULTS.md Q2 (0.6728 / 0.6747). Aayush reviews, then builds P3.4a on it |
-| Next up | **Aayush, P3.1 DONE 14 Sep 00:40 (C-025):** NRMS reproduced on both datasets, score files verified locally, RESULTS.md Q3.1 written with the published comparison and gap. Next: **P3.4a** (paired bootstrap harness, local) then the P3.2 plan (D4: recency/freshness-aware NRMS, evidence in C-025). Earlier in the evening: U1 (SPEC §13, C-024) and U2 (`src/baselines/nrms_data`, 9 oracles) committed at `5a6bb76`. **MIND-native go/no-go resolved: GO** — `scripts/kaggle/nrms_mind_smoke` v3 trained one epoch of the recommenders NRMS on MINDsmall_train under tf-keras (1,041 s train, dev group_auc 0.6489 after 1 epoch, alignment oracle held on all 73,152 dev impressions; log `data/logs/kaggle/nrms_mind_smoke_v3.log`). No fallback. Kernels `nrms_ebnerd` and `nrms_mind` are in their DEMO_CHECK determinism runs; full runs follow (EB-NeRD ≈ 3.5 h incl. ~65 min of full-slate scoring measured at 15.6 ms/impression; MIND ≈ 2 h). Remaining P0 split 13 Sep: **step 4 done (C-023: no team feature, submit from Anurag's account)**; **Anurag → steps 5–6** (large files as Kaggle datasets, hash-verified; MINDlarge_train/dev deferred to D5) **and step 8** (`src/eval/scores.py`). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
+| Next up | **Aayush, P3.1 DONE 14 Sep 00:40 (C-025):** NRMS reproduced on both datasets, score files verified locally, RESULTS.md Q3.1 written with the published comparison and gap. **P3.4a DONE 14 Sep (C-026):** `make paired A=… B=…` is the Q3 judge, calibrated and validated on the real file; `bootstrap_ci` OOM fix. Next: **P3.2 plan** (D4: recency/freshness-aware NRMS, evidence in C-025); reranker-vs-NRMS runs when Anurag's `config.FINAL` scores file lands. Earlier in the evening: U1 (SPEC §13, C-024) and U2 (`src/baselines/nrms_data`, 9 oracles) committed at `5a6bb76`. **MIND-native go/no-go resolved: GO** — `scripts/kaggle/nrms_mind_smoke` v3 trained one epoch of the recommenders NRMS on MINDsmall_train under tf-keras (1,041 s train, dev group_auc 0.6489 after 1 epoch, alignment oracle held on all 73,152 dev impressions; log `data/logs/kaggle/nrms_mind_smoke_v3.log`). No fallback. Kernels `nrms_ebnerd` and `nrms_mind` are in their DEMO_CHECK determinism runs; full runs follow (EB-NeRD ≈ 3.5 h incl. ~65 min of full-slate scoring measured at 15.6 ms/impression; MIND ≈ 2 h). Remaining P0 split 13 Sep: **step 4 done (C-023: no team feature, submit from Anurag's account)**; **Anurag → steps 5–6** (large files as Kaggle datasets, hash-verified; MINDlarge_train/dev deferred to D5) **and step 8** (`src/eval/scores.py`). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
 
 ---
 
@@ -828,6 +828,36 @@ Entry format:
   files (it does not exist yet); the check is scripted in the kernels and repeated by hand on the
   laptop (RESULTS.md Q3.1), to be turned into a test when the reader lands.
 - Affects: `RESULTS.md` Q3.1, `scripts/kaggle/RUN_LEDGER.md`, `PLAN.md` §3 P3.1 status, D4
+- Status: active
+
+### C-026 · P3.4a done: `paired_delta` adopted and moved to `src/eval`; the file-level harness; an OOM fix in `bootstrap_ci`
+- Date / author: 2026-09-14 · Aayush Pandey (Claude Code)
+- Decision: the provisional `src/rerank/common.paired_delta` (C-015) is **adopted as is** — the
+  statistic was right — and **moved to `src/eval/bootstrap.py`** beside the unpaired CI; the old
+  name is a re-export, so `src/rerank/common.py` changed by one import line (Anurag's file,
+  noted here). The harness around it is `src/eval/paired.py` + `scripts/paired_compare.py` +
+  `make paired` (SPEC §14): reader/validator for the §13.3 contract (to be swapped for Anurag's
+  `src/eval/scores.py` when it lands), manifest compatibility, labels from the split,
+  intersection on `imp_row` with a wrong-split guard, Δ per metric, verdict from the CI only.
+- Why / evidence: calibration oracles (coverage ≥ 90 % over 200 trials for Δ = 0 and 0.02;
+  paired width < ½ unpaired) and the real-file checks in `RESULTS.md` Q3 "Harness validation":
+  rank-preserving rescale → Δ = 0 exactly; +0.5 on clicks → every CI > 0; N(0, 0.01) noise →
+  a *real* −0.0011 AUC, significant at 20k impressions. That last one corrected the agent's
+  first test, which had assumed noise is a zero-Δ change.
+- **Incident and fix.** The second full-file `make paired` was OOM-killed at 01:16 on 14 Sep
+  (dmesg: python, 3.4 GB RSS, with ~5 GB available) and took the editor session down. Cause:
+  A1's `bootstrap_ci` draws the whole (iterations × n) int64 index array at once — 1.96 GB at
+  244,647 impressions, plus the same again for the gather — eight times per comparison. Fix:
+  draw in blocks of 100 iterations. Because sequential blocks consume the generator stream in
+  the same order, the resampled means are **bit-identical** to the one-shot draw
+  (`tests/test_bootstrap.py`), so no CI recorded in `RESULTS.md` moves. Peak RSS for a full
+  EB-NeRD comparison: 1.3 GB, 49 s (was killed above 3.4 GB). Rule of thumb for this laptop:
+  anything that allocates (1,000 × 245k) at once will die.
+- Ready for: the reranker-vs-NRMS comparison the moment `config.FINAL`'s score file exists
+  (Anurag's P0.8 round trip); the P3.2–3.4 ablation rows.
+- Affects: `src/eval/bootstrap.py`, `src/eval/paired.py` (new), `src/rerank/common.py` (one
+  line), `scripts/paired_compare.py` (new), `Makefile` (`paired`), `SPEC.md` §14,
+  `tests/test_paired.py` (new), `tests/test_bootstrap.py`
 - Status: active
 
 ---

@@ -979,3 +979,56 @@ A harness must refuse to pair two files whose manifests differ in `dataset`, `sp
   xlm-roberta-large stays (departure recorded if it does not); the quota consumed by every run
   is in `RESULTS.md`.
 - A reproduction run is one kernel push, recorded with its exact command and commit.
+
+---
+
+## 14 · A2 Phase 3.4a — The paired bootstrap (Q3.4)
+
+Owner: Aayush Pandey. Decision: CONTEXT.md C-026. Code: `src/eval/bootstrap.paired_delta`
+(moved from `src/rerank/common`, re-exported there), `src/eval/paired.py`,
+`scripts/paired_compare.py`, `make paired A=… B=…`. Numbers: `RESULTS.md` Q3 "Harness validation".
+
+**The statistic.** Two systems scored on the same impressions give per-impression metric values
+a_i and b_i (AUC, MRR, nDCG@5, nDCG@10 from `src/eval/metrics`, the code behind every Q2 number).
+The estimate is Δ = mean(b_i − a_i); its 95% interval is the percentile bootstrap over
+resampled *impressions* (1,000 resamples, seed 0, drawn in blocks of 100 so memory stays
+bounded). Pairs where either value is NaN (AUC on an all-click or no-click slate) are dropped.
+Pairing matters because the two systems share each impression's difficulty: the shared variance
+cancels in the difference, so the interval is far tighter than the gap between two independent
+CIs (measured ≥ 2× tighter in `tests/test_paired.py`).
+
+**Inputs.** Two scores files in the §13.3 contract with their manifests. Labels are joined from
+the split file named in the manifest (`split_labels`), never read from the scores file.
+
+**Rules the harness enforces.**
+
+1. Manifests must agree on `dataset`, `split` and `framing`; otherwise it refuses (PLAN.md §2:
+   never compare in-impression scores with retrieved-top-K scores).
+2. The comparison is on the impressions **both** files scored. A subset is a sample and is
+   allowed (the reranker's seeded 100k of EB-NeRD validation against NRMS's 244,647); a common
+   set under 50 % of the smaller file is refused as a wrong split. All three counts are reported.
+3. Within a common impression both files must list the same candidates in the same order.
+4. Every score row must find its label; a missing label is an error, not a zero.
+5. **The verdict comes only from the interval:** "B beats A" iff the paired CI's lower bound is
+   > 0; "A beats B" iff its upper bound is < 0; otherwise "no significant difference". Point
+   estimates never decide.
+
+**Output.** A markdown table (each system's own mean with its unpaired CI, Δ with its paired CI,
+the verdict) and a JSON record carrying both manifests, the counts, iterations, seed, the
+command and the commit, so a claim in `RESULTS.md` can be regenerated from the record alone.
+
+**Verification** (`tests/test_paired.py`, 12 tests; `tests/test_bootstrap.py`):
+
+- Calibration on synthetic pairs with known truth: a zero-Δ pair's CI covers 0; a constructed
+  0.02 shift over 5,000 impressions is recovered and excludes 0; over 200 trials at n = 1,000
+  the 95 % CI covers the true Δ ≥ 90 % of the time for Δ = 0 and Δ = 0.02; the paired interval
+  is < half the unpaired width; identical inputs and seed give identical output.
+- Toy score files with hand-computed metrics (AUC 1 vs 1/3, Δ_AUC = −2/3, Δ_MRR by hand);
+  refusal on mismatched framing/split, on a wrong-split overlap, on a bad schema; counts on a
+  subset comparison.
+- On the real EB-NeRD NRMS file: a rank-preserving rescale gives Δ exactly 0 on every metric;
+  N(0, 0.01) noise is detected as a significant AUC loss at 20k impressions (MRR's loss is
+  real but not significant — the noisier statistic); +0.5 on clicked candidates is a
+  significant gain on every metric.
+- `bootstrap_ci`'s blocked draw reproduces A1's one-shot draw bit for bit (so no recorded CI
+  moved), at 0.42 GB peak instead of ~4 GB at 244,647 impressions.

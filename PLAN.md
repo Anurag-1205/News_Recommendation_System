@@ -124,7 +124,7 @@ new work.
 | **P1** Behavioural features | Q1 | 12–13 Sep | Anurag | features in `src/features/`; leakage test covers each one | ☑ done 11 Sep |
 | **P2** Two-stage reranker | Q2 | 13–15 Sep | Anurag | before/after-rerank table, both datasets, with CIs | ☑ locked 11 Sep (C-018); D1 framing (b) open |
 | **P3.1** Reproduce NRMS | Q3.1 | 12–15 Sep | **Aayush** | NRMS on both datasets (Kaggle, float32 — C-022); our number vs the published one; score files written | ☑ done 14 Sep (C-025) |
-| **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☐ |
+| **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☑ done 14 Sep (C-026): adopted + moved; `make paired` |
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☐ |
 | **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☐ |
 | **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag & Aayush** | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |

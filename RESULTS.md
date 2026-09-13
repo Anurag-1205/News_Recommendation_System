@@ -444,6 +444,31 @@ Score files (gitignored): `data/scores/ebnerd/validation/nrms.{parquet,json}`,
 `data/scores/mind/MINDsmall_dev/nrms.{parquet,json}`, SPEC §13.3 schema; the P3.4a harness
 reads them.
 
+### Q3.4 · Paired bootstrap harness — validation, 2026-09-14, Aayush Pandey (P3.4a, SPEC.md §14, C-026)
+
+These rows validate the **judge**, not a model: both "B" systems are constructed from the real
+EB-NeRD NRMS file (`_check_*.parquet`, gitignored, manifest `note` says so). Command:
+`make paired A=data/scores/ebnerd/validation/nrms.parquet B=data/scores/ebnerd/validation/<B>.parquet JSON=data/processed/paired/<name>.json`
+(all 244,647 validation impressions, 1,000 resamples, seed 0; records in `data/processed/paired/`).
+
+| B | construction | Δ AUC (B − A) | Δ MRR | Δ nDCG@5 | Δ nDCG@10 | verdict | time / peak RSS |
+|---|---|---|---|---|---|---|---|
+| `nrms_rescaled` | score × 2 + 1 (rank-preserving) | +0.0000 [+0.0000, +0.0000] | +0.0000 [+0.0000, +0.0000] | +0.0000 [+0.0000, +0.0000] | +0.0000 [+0.0000, +0.0000] | no significant difference | 64 s |
+| `nrms_oracle_boost` | +0.5 on every clicked candidate | +0.4082 [+0.4070, +0.4093] | +0.5334 [+0.5322, +0.5346] | +0.5217 [+0.5205, +0.5229] | +0.4459 [+0.4449, +0.4469] | B beats A | 49 s / 1.3 GB |
+
+Sensitivity (test, first 20,000 impressions, 300 resamples): N(0, 0.01) noise on the scores is
+a real degradation — AUC −0.0011 [−0.0020, −0.0004], significant; MRR −0.0005 [−0.0013, +0.0002],
+not significant. Calibration on synthetic pairs: `tests/test_paired.py` (coverage ≥ 90 % over
+200 trials at n = 1,000 for Δ = 0 and Δ = 0.02).
+
+**Incident.** The first attempt at the boosted row was OOM-killed (dmesg 01:16, python at
+3.4 GB RSS): A1's `bootstrap_ci` allocated the (1,000 × 244,647) index array at once. Fixed by
+blocked draws, bit-identical to the old ones (`tests/test_bootstrap.py`); every CI in this file
+is unchanged.
+
+**Pending, not run:** reranker `config.FINAL` vs NRMS on both datasets — needs Anurag's scores
+file for the reranker (P0.8). The command above is the one that will produce it.
+
 
 _Not started._
 
