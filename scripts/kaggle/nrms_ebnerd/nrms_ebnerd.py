@@ -27,7 +27,7 @@ import datetime as dt
 from pathlib import Path
 
 # ---- knobs -----------------------------------------------------------------------------------------
-DEMO_CHECK = True
+DEMO_CHECK = False
 DATASPLIT = "ebnerd_demo" if DEMO_CHECK else "ebnerd_small"
 EPOCHS = 1 if DEMO_CHECK else 5
 TRANSFORMER = "FacebookAI/xlm-roberta-base" if DEMO_CHECK else "FacebookAI/xlm-roberta-large"
