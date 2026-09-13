@@ -29,7 +29,7 @@ from pathlib import Path
 
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-DEMO_CHECK = True
+DEMO_CHECK = False
 EPOCHS = 1 if DEMO_CHECK else 5
 SEED, BS = 42, 32
 REC_COMMIT = "0bb4b3690941ffb668118e31ccaf8a7d19f8212a"
