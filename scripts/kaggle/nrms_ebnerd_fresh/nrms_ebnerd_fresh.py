@@ -116,11 +116,13 @@ print("FRESH_STATS", json.dumps(STATS.to_dict()), "(fitted on the full train spl
 
 
 def attach_fresh(beh, mask_note=""):
-    """fresh_inview aligned with article_ids_inview, computed on THIS frame (after any sampling)."""
-    f = fresh_from_frames(beh.select("imp_row", t=pl.col("impression_time"), article_ids_inview=pl.col("article_ids_inview")), first_known, STATS)
-    lists = as_lists(beh.select("imp_row", "article_ids_inview"), f)
-    print(f"fresh{mask_note}: {f.height} candidates, unknown {100 * f['unknown'].mean():.3f}%, x mean {f.filter(pl.col('unknown') == 0)['x'].mean():.3f} sd {f.filter(pl.col('unknown') == 0)['x'].std():.3f}")
-    return beh.join(lists, on="imp_row", how="left", maintain_order="left")
+    """fresh_inview aligned with article_ids_inview, computed on THIS frame (after any sampling).
+    Keyed by a fresh row index: a sampled frame has several rows per imp_row (one per click)."""
+    beh = beh.with_row_index("_srow")
+    f = fresh_from_frames(beh.select("_srow", t=pl.col("impression_time"), article_ids_inview=pl.col("article_ids_inview")), first_known, STATS, key="_srow")
+    lists = as_lists(beh.select("_srow", "article_ids_inview"), f, key="_srow")
+    print(f"fresh{mask_note}: {f.height} candidates on {beh.height} rows, unknown {100 * f['unknown'].mean():.3f}%, x mean {f.filter(pl.col('unknown') == 0)['x'].mean():.3f} sd {f.filter(pl.col('unknown') == 0)['x'].std():.3f}")
+    return beh.join(lists, on="_srow", how="left", maintain_order="left").drop("_srow")
 
 
 df = (train_full.drop("labels")

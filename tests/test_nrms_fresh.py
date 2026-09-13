@@ -86,3 +86,21 @@ def test_parity_with_reranker_freshness_on_real_rows():
     assert j.height == ref.height
     a, b = j["freshness_hours"].to_numpy(), j["ref_h"].to_numpy()
     assert np.array_equal(np.isnan(a), np.isnan(b)) and np.allclose(a[~np.isnan(a)], b[~np.isnan(b)])
+
+
+def test_sampled_frame_with_duplicate_imp_row_uses_a_row_key():
+    """wu2019 sampling gives an impression with two clicks two rows sharing imp_row (EB-NeRD demo
+    run v2 died here). With a row key each sampled row gets its own slate's pairs."""
+    sampled = pl.DataFrame({
+        "imp_row": pl.Series([0, 0, 1], dtype=pl.UInt32),
+        "t": [T0, T0, T0 + 2 * H],
+        "article_ids_inview": pl.Series([[5, 9], [6, 5], [7, 6]], dtype=pl.List(pl.Int32)),
+    }).with_row_index("_srow")
+    with pytest.raises(ValueError, match="not unique"):
+        as_lists(sampled, fresh_from_frames(sampled, FIRST_KNOWN, FreshStats(1.0, 0.5)))
+    feats = fresh_from_frames(sampled, FIRST_KNOWN, FreshStats(1.0, 0.5), key="_srow")
+    lists = as_lists(sampled, feats, key="_srow")
+    assert lists.columns == ["_srow", "fresh_inview"]
+    assert lists["fresh_inview"].list.len().to_list() == [2, 2, 2]
+    assert lists["fresh_inview"][0].to_list()[1] == [0.0, 1.0]       # article 9 unknown, first row only
+    assert lists["fresh_inview"][1].to_list()[1][1] == 0.0            # article 5 known in the second row

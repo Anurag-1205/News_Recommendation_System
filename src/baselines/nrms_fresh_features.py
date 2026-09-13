@@ -34,10 +34,14 @@ class FreshStats:
 
 
 def fresh_from_frames(beh: pl.DataFrame, first_known: pl.DataFrame, stats: FreshStats, *,
-                      untimed_ts=None) -> pl.DataFrame:
-    """`beh`: `imp_row`, `t`, `article_ids_inview`. `first_known`: `article_id`, `ts` (§11.8).
-    One row per candidate, slate order, with the raw hours and the two model inputs."""
-    req = (beh.select("imp_row", "t", article_id=pl.col("article_ids_inview"))
+                      untimed_ts=None, key: str = "imp_row") -> pl.DataFrame:
+    """`beh`: `key`, `t`, `article_ids_inview`. `first_known`: `article_id`, `ts` (§11.8).
+    One row per candidate, slate order, with the raw hours and the two model inputs.
+
+    `key` must identify a *row* of `beh`. For a split it is `imp_row`; for a wu2019-sampled
+    training frame it must be a fresh row index — sampling turns an impression with k clicks into
+    k rows that share `imp_row` (EB-NeRD demo run v2 died on exactly that)."""
+    req = (beh.select(pl.col(key).alias("imp_row"), "t", article_id=pl.col("article_ids_inview"))
            .with_columns(cand_position=pl.int_ranges(1, pl.col("article_id").list.len() + 1, dtype=pl.Int64))
            .explode("article_id", "cand_position", empty_as_null=False))
     out = freshness_batch(first_known, req, untimed_ts=untimed_ts)
@@ -53,12 +57,17 @@ def fit_stats(feats: pl.DataFrame) -> FreshStats:
     return FreshStats(mu=float(v.mean()), sigma=float(v.std()))
 
 
-def as_lists(beh: pl.DataFrame, feats: pl.DataFrame) -> pl.DataFrame:
-    """`(imp_row, fresh_inview)`: per impression, a list of [x, unknown] pairs in slate order."""
+def as_lists(beh: pl.DataFrame, feats: pl.DataFrame, *, key: str = "imp_row") -> pl.DataFrame:
+    """`(key, fresh_inview)`: per row of `beh`, a list of [x, unknown] pairs in slate order.
+    `feats` is `fresh_from_frames(beh, …, key=key)`, whose `imp_row` column holds that key;
+    `beh[key]` must be unique (a fresh row index on a sampled frame)."""
+    if beh[key].n_unique() != beh.height:
+        raise ValueError(f"{key} is not unique per row; use a row index as the key on sampled frames")
     pairs = (feats.sort("imp_row", "cand_position")
              .with_columns(pair=pl.concat_list(pl.col("x").cast(pl.Float32), pl.col("unknown").cast(pl.Float32)))
-             .group_by("imp_row", maintain_order=True).agg(fresh_inview=pl.col("pair")))
-    out = beh.select("imp_row").join(pairs, on="imp_row", how="left", maintain_order="left")
+             .group_by("imp_row", maintain_order=True).agg(fresh_inview=pl.col("pair"))
+             .rename({"imp_row": key}))
+    out = beh.select(key).join(pairs, on=key, how="left", maintain_order="left")
     lens = out["fresh_inview"].list.len().fill_null(0)
     if not (lens == beh["article_ids_inview"].list.len()).all():
         raise ValueError("fresh_inview lengths do not match article_ids_inview")

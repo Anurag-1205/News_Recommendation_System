@@ -92,7 +92,7 @@ if not DEMO_CHECK:
     for name, sub in [("MINDsmall_train", "train"), ("MINDsmall_dev", "valid")]:
         sh(f"mkdir -p {WORK}/repo/data/interim/mind/{name}/{name} && cp {DATA}/{sub}/behaviors.tsv {DATA}/{sub}/news.tsv {WORK}/repo/data/interim/mind/{name}/{name}/")
 os.environ.update(NRMS_YAML=f["yaml"], NRMS_EMB=f["emb"], NRMS_WDICT=f["wdict"], NRMS_UDICT=f["udict"])
-sh(f"cd {WORK}/repo && PYTHONPATH=. TF_USE_LEGACY_KERAS=1 python -m pytest tests/test_nrms_fresh_model_mind.py -q -p no:cacheprovider")
+sh(f"cd {WORK}/repo && PYTHONPATH=.:{WORK}/recommenders TF_USE_LEGACY_KERAS=1 python -m pytest tests/test_nrms_fresh_model_mind.py -q -p no:cacheprovider")
 stage("data+oracle")
 
 # ---- 2b. freshness table: the reranker's first-seen feature, standardised on the train split ----------

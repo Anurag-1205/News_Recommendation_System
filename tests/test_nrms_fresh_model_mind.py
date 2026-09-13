@@ -3,11 +3,16 @@ tf-keras (TF_USE_LEGACY_KERAS=1), the recommenders package on sys.path and the M
 (`NRMS_YAML`, `NRMS_EMB`, `NRMS_WDICT`, `NRMS_UDICT` env vars) — so they skip on the laptop and
 run inside the Kaggle kernel before training."""
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 tf = pytest.importorskip("tensorflow")
+for p in ("external/recommenders", "/kaggle/working/recommenders"):
+    if Path(p).exists() and p not in sys.path:
+        sys.path.insert(0, p)
 rec = pytest.importorskip("recommenders")
 if not all(os.environ.get(k) for k in ("NRMS_YAML", "NRMS_EMB", "NRMS_WDICT", "NRMS_UDICT")):
     pytest.skip("MIND utils env vars not set", allow_module_level=True)
