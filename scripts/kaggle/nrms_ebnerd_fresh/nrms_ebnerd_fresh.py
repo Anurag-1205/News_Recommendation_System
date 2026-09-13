@@ -101,7 +101,7 @@ from src.baselines.nrms_fresh_ebrec import NRMSFreshLoader, NRMSFreshModel
 stage("imports")
 
 # ---- 1b. the model-level oracles, on this image, before any training -----------------------------
-sh(f"set -o pipefail; cd {WORK}/repo && PYTHONPATH=. python -m pytest tests/test_nrms_fresh_model.py -q -p no:cacheprovider 2>&1 | tail -3")
+sh(f"cd {WORK}/repo && PYTHONPATH=. python -m pytest tests/test_nrms_fresh_model.py -q -p no:cacheprovider")
 stage("oracle")
 
 # ---- 2. frames --------------------------------------------------------------------------------------
