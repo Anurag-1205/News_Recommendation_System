@@ -229,6 +229,8 @@ for k_ours, k_bench in [("auc", "auc"), ("mrr", "mrr"), ("ndcg@5", "ndcg@5"), ("
     d = abs(ours[k_ours] - bench[k_bench]); print(f"AGREE {k_ours} |Δ|={d:.2e}")
     assert d < 1e-6, (k_ours, ours[k_ours], bench[k_bench])
 stage("eval")
-sh(f"rm -rf {CH}")     # chunks were the resume mechanism; the concatenated file is the deliverable
+sh(f"rm -rf {CH} {DATA} {WORK}/ebnerd-benchmark {WORK}/repo")   # chunks were the resume mechanism; the
+# concatenated file is the deliverable. Data and code copies are deleted so `kaggle kernels output`
+# (paginated at 20 files) returns out/ first instead of 130 MB of inputs.
 print(f"RESULT PASS transformer={TRANSFORMER} epochs={EPOCHS} val_auc_holdout={max(hist.history['val_auc']):.6f} "
       f"full_slate_auc={ours['auc']:.6f} total_seconds={time.time() - T0:.0f}")

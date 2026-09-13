@@ -146,4 +146,5 @@ for k_ours, k_pkg in [("auc", "group_auc"), ("mrr", "mean_mrr"), ("ndcg@5", "ndc
     d = abs(round(ours[k_ours], 4) - pkg[k_pkg]); print(f"AGREE {k_ours} |Δ|={d:.2e} (cal_metric rounds to 4 dp)")
     assert d <= 1e-4 + 1e-9, (k_ours, ours[k_ours], pkg[k_pkg])
 stage("eval")
+sh(f"rm -rf {DATA} {WORK}/recommenders {WORK}/repo")   # keep only out/: `kaggle kernels output` pages at 20 files
 print(f"RESULT PASS epochs={EPOCHS} group_auc={pkg['group_auc']} full_slate_auc={ours['auc']:.6f} total_seconds={time.time() - T0:.0f}")

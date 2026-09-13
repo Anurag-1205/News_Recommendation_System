@@ -630,3 +630,43 @@ human-written code. Both team members append here. Chat exports are submitted wi
   as Int32 (MIND's are strings), and assumed 0-based `cand_position` (the code and the trained
   model use 1-based). All three amended per his reply; the agent had not checked the test file
   before proposing.
+
+### 2026-09-13/14 · Aayush Pandey · Claude Code (Opus 5) · P3.1: NRMS baseline reproduced on both datasets
+- Asked: "lets start with 3.1" (plan mode; D3 decided by Aayush: native implementation per
+  dataset; MIND-small as a private Kaggle dataset), then "do all of my p0 tasks"-style follow-
+  through: "what is the current progress", "save it somewhere for every run", "commit and push
+  the code also by yourself" (later: commit yes, push manual).
+- Produced (AI-generated, reviewed by Aayush; commits `73de1a0`…`b557f5c`):
+  - `SPEC.md` §13 (protocol, scores-file contract, verification), `CONTEXT.md` C-024, C-025.
+  - `src/baselines/nrms_data.py` (EB-NeRD frames with `imp_row`, `scores_frame`,
+    `truncate_history`) + `tests/test_nrms_data.py` (9 oracles: parity with `src/rerank`
+    loaders row-for-row, exact scores-frame rows/dtypes, the benchmark's docstring example,
+    column names against the benchmark's constants).
+  - Kernels: `scripts/kaggle/nrms_ebnerd/`, `nrms_mind_smoke/`, `nrms_mind/`; the private
+    dataset `mind-small-official` (`upload_mind_small.sh`, SHA256SUMS); `scripts/kaggle/ledger.py`
+    + `RUN_LEDGER.md` (one row per run, 17 so far).
+  - `RESULTS.md` Q3.1 with the published numbers sourced from the papers (Kruse et al. 2024
+    Table 3 via arXiv HTML; Wu et al. 2020 Table 3 and §5.1 read from the ACL PDF) and the gap
+    explanation.
+- Verified by: `make test` 334 passed; on Kaggle, per SPEC §13.4: determinism twins identical to
+  every digit on both datasets; our metrics = reference evaluators (1e-16 EB-NeRD, 4 dp MIND);
+  row counts = Σ slate lengths; `imp_row` alignment; then on the laptop: both score files joined
+  to Anurag's frames with every id equal and the metrics recomputed to the same digits.
+- Failed / corrected (all in the ledger with the log):
+  - EB-NeRD kernel v1: adapter column `article_ids_fixed` vs the benchmark's `article_id_fixed`
+    — the parity tests compared values, not names; a name test was added.
+  - EB-NeRD kernel v2: `CI` fields are `mean/lo/hi`, not `value/low/high`; the eval tail was then
+    exercised locally on a toy before the next push.
+  - MIND smoke v1/v2: Kaggle mounts uploaded zips extracted, at
+    `/kaggle/input/datasets/<user>/<slug>/…`; two path guesses failed before a glob was used.
+  - MIND demo twins v1/v2 differed by 0.002 AUC: the package seeds TF and numpy but not Python's
+    `random`, which `newsample` uses for negatives. Seeded in our kernel; v3/v4 identical.
+  - `kaggle kernels output` pages at 20 files and first returned the kernel's input copies
+    (130 MB); fixed with `--page-size 200 --file-pattern 'out/scores/.*'`, and the kernels now
+    delete their inputs before exit.
+  - The Bash tool's 10-minute cap killed a long poll loop; long runs are now watched with a
+    persistent monitor.
+  - Estimates vs measured: EB-NeRD scoring was 24 ms/impression (est. 15.6 from demo) → 98 min,
+    not 45; MIND per-epoch eval ran 177 s with determinism on (165 s without).
+  - Departure from CLAUDE.md §3, by Aayush's instruction: the agent commits on `a2-click-logs`;
+    Aayush pushes.

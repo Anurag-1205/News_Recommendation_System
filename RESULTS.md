@@ -355,6 +355,95 @@ one row in [`scripts/kaggle/RUN_LEDGER.md`](scripts/kaggle/RUN_LEDGER.md), appen
 `scripts/kaggle/ledger.py <kernel> <version>` after each run.** The tables below cite ledger rows
 by kernel and version; a number that is not in the ledger was not run.
 
+### Q3.1 · NRMS reproduced on both datasets — 2026-09-14, Aayush Pandey (P3.1, SPEC.md §13, CONTEXT.md C-021–C-025)
+
+Both runs: one Kaggle T4, float32, op determinism on, seeds fixed; every validation impression
+scored on its full slate; metrics from **our** `src/eval/metrics` (the code behind the Q2 numbers)
+with a 1,000-resample bootstrap CI over impressions, and required by the kernel to equal the
+reference implementation's own evaluator. Score files verified on the laptop: they join Anurag's
+`src/rerank` frames on (`imp_row`, `cand_position`) with every `impression_id` and `article_id`
+equal, and the metrics recompute from the file plus his labels to the same digits.
+
+**EB-NeRD** — ledger `a2-nrms-ebnerd` v4 (`data/logs/kaggle/a2-nrms-ebnerd_v4.log`, repo `5a6bb76`).
+Command: `.venv/bin/kaggle kernels push -p scripts/kaggle/nrms_ebnerd --accelerator NvidiaTeslaT4`
+with `DEMO_CHECK=False`. `jppol-ai/ebnerd-benchmark` at `5164e2c`; fit on `ebnerd_small/train`
+(232,887 impressions → 226,452 wu2019 samples, npratio 4; last train day 25 May = 7,825 samples
+held out for early stopping), scored on all **244,647** `ebnerd_small/validation` impressions
+(2,928,942 candidates). xlm-roberta-large word embeddings (0.318 s/step on the 200-step gate,
+kept), 257.9M parameters, 5 epochs at 1,609 s each; scoring 5,836 s; **4 h 02 min**, 4.0 h of quota.
+
+| EB-NeRD | AUC | MRR | nDCG@5 | nDCG@10 | on |
+|---|---|---|---|---|---|
+| **NRMS, ours** | **0.5600** [0.5588, 0.5612] | 0.3491 [0.3479, 0.3503] | 0.3884 [0.3870, 0.3897] | 0.4668 [0.4656, 0.4679] | small validation, all impressions |
+| NRMS, published (Kruse et al. 2024, Table 3) | 0.6103 | 0.3975 | 0.4445 | 0.5124 | hidden test set (leaderboard) |
+| Clicks (popularity), published, same table | 0.5970 | 0.3774 | 0.4236 | 0.4965 | hidden test set |
+| Random, published, same table | 0.4998 | 0.3156 | 0.3489 | 0.4338 | hidden test set |
+| reranker `config.FINAL` (Q2) | 0.6728 | — | — | — | 100k-impression sample of the same validation week |
+| NRMS holdout `val_auc` during training | 0.6393 | | | | last train day, **sampled 5-candidate slates** — not comparable |
+
+Holdout `val_auc` by epoch: 0.6250, 0.6348, 0.6364, 0.6294, **0.6393** (best = last; checkpoint kept it).
+
+**MIND** — ledger `a2-nrms-mind` v5 (`data/logs/kaggle/a2-nrms-mind_v5.log`). Command:
+`.venv/bin/kaggle kernels push -p scripts/kaggle/nrms_mind --accelerator NvidiaTeslaT4` with
+`DEMO_CHECK=False`. `recommenders-team/recommenders` at `0bb4b36` under tf-keras; the quick-start
+recipe (GloVe-300d `embedding.npy`, history 50, npratio 4, title 30, batch 32, Adam 1e-4,
+dropout 0.2), 11.29M parameters; fit on `MINDsmall_train` (156,965 impressions), scored on all
+**73,152** `MINDsmall_dev` impressions (2,740,998 candidates — the same candidate set as Q2).
+5 epochs at 1,330 s + 177 s eval each; **2 h 10 min**, 2.2 h of quota.
+
+| MIND | AUC | MRR | nDCG@5 | nDCG@10 | on |
+|---|---|---|---|---|---|
+| **NRMS, ours** | **0.6667** [0.6647, 0.6688] | 0.3220 [0.3195, 0.3243] | 0.3557 [0.3529, 0.3584] | 0.4184 [0.4159, 0.4208] | MINDsmall_dev, all impressions |
+| NRMS, published (Wu et al. 2020, Table 3, "Overall") | 0.6776 | 0.3305 | 0.3594 | 0.4163 | full-MIND test set; trained on half the users of full MIND; mean of 10 runs |
+| NRMS, recommenders quick-start notebook output | 0.6127 | 0.2697 | 0.2912 | 0.3625 | MIND-**demo** dev, 5 epochs (their recorded run, TF 2.6) |
+| reranker `config.FINAL` (Q2, pointwise GBDT, 7 features) | 0.6747 [0.6725, 0.6768] | 0.3295 [0.3272, 0.3321] | 0.3630 [0.3603, 0.3657] | 0.4217 [0.4193, 0.4243] | same 73,152 impressions |
+| stage 1 alone: MiniLM cosine (Q2) | 0.6353 | 0.3084 | 0.3371 | 0.3960 | same |
+
+Dev `group_auc` by epoch: 0.6466, 0.6523, 0.6613, 0.6569, **0.6667** (the package keeps the last
+epoch, not the best; here they coincide).
+
+**The gap, explained (PLAN.md P3.1 step 2).**
+
+*MIND: ours 0.6667 vs published 0.6776, −0.011.* (1) Training data: the paper trains on half the
+users of full MIND (≈ 500k users); we train on MINDsmall_train (50k users) — the dominant
+factor, and in the expected direction. (2) Evaluation set: their hidden test set vs our dev
+split; A1 measured a dev-to-leaderboard offset of −0.03 to −0.09 for feature models (SPEC §7),
+so this factor, if anything, flatters our number. (3) Their figure is the mean of 10 runs; ours
+is one deterministic run. (4) Same implementation (the paper cites Microsoft Recommenders,
+which is what we ran), same GloVe-300d initialisation, same architecture. Net: a −0.011 gap on a
+data set 10× smaller is a faithful reproduction. The quick-start's own recorded 0.6127 on
+MIND-demo shows the size-of-training-data slope directly (demo → small: +0.054).
+
+*EB-NeRD: ours 0.5600 vs published 0.6103, −0.050.* (1) Evaluation set: the paper's number is
+on the hidden test set (1–8 June) after training on `ebnerd_large`; ours is on the small
+validation week (25 May – 1 June) after training on the small train week — 12× less training
+data, the largest factor. (2) The paper gives no NRMS training details (epochs, embeddings,
+history), so the recipe cannot be matched exactly; we followed the repository README recipe.
+(3) The published script's dropped-embedding bug (C-021) means the published recipe may
+effectively train a random 32k×300 embedding table; we passed the xlm-roberta-large embeddings,
+which should help, not hurt. (4) Keras `mixed_float16` unusable, so float32 (C-022) — no
+accuracy effect expected. (5) In the paper's own Table 3, NRMS (61.03) sits only 1.3 AUC above
+the click-popularity baseline (59.70); on EB-NeRD, text-only NRMS is close to popularity, so a
+−0.05 shift from far less training data is plausible.
+
+**What the two numbers say together.** On MIND the text-only neural baseline lands 0.008 AUC
+below the feature-engineered two-stage reranker; on EB-NeRD it lands 0.113 below. That asymmetry
+matches A1's finding (RESULTS.md at `be15ee6`, Q9c) that recency dominates on EB-NeRD: NRMS has no
+notion of article age, popularity or session, which are exactly the reranker's strongest EB-NeRD
+features. No "beats" is claimed here — the reranker-vs-NRMS difference is measured by P3.4a's
+paired bootstrap, and D4 (the one principled change) is chosen with this asymmetry as evidence.
+
+**Determinism, measured** (ledger): EB-NeRD demo twins v2/v3 identical to every digit; MIND demo
+twins v1/v2 differed by 0.002 AUC until Python's `random` was seeded (the package seeds TF and
+numpy only; `newsample` draws the negatives from the stdlib), after which v3/v4 were identical.
+
+**Serving-time honesty (Q9).** NRMS uses history and titles only; no serving-unavailable feature
+exists in either baseline, so the "with vs without" row is not applicable and is stated as such.
+
+Score files (gitignored): `data/scores/ebnerd/validation/nrms.{parquet,json}`,
+`data/scores/mind/MINDsmall_dev/nrms.{parquet,json}`, SPEC §13.3 schema; the P3.4a harness
+reads them.
+
 
 _Not started._
 
