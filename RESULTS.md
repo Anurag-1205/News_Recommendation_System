@@ -350,6 +350,12 @@ model):
 
 ## Q3 · Baseline reproduced, then beaten
 
+**Every Kaggle run — successes and failures, with commit, mode, metrics, timings and log path — is
+one row in [`scripts/kaggle/RUN_LEDGER.md`](scripts/kaggle/RUN_LEDGER.md), appended by
+`scripts/kaggle/ledger.py <kernel> <version>` after each run.** The tables below cite ledger rows
+by kernel and version; a number that is not in the ledger was not run.
+
+
 _Not started._
 
 ## Q4 · Serving and scale

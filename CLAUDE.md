@@ -126,7 +126,9 @@ git pull → read CONTEXT.md → plan mode → SPEC.md entry → oracle/test →
 - Announce which rung you're on.
 - Land the toy-scale path first (MIND-small, EB-NeRD demo) locally, then scale up on Kaggle. Never
   debug at 13.5M impressions when 500 rows reproduce the bug.
-- When a run takes minutes, save its output to a file and cite the path.
+- When a run takes minutes, save its output to a file and cite the path. **Every Kaggle kernel
+  run gets a row in `scripts/kaggle/RUN_LEDGER.md`** via `scripts/kaggle/ledger.py <kernel> <vN>`,
+  failures included; the log itself goes to `data/logs/kaggle/`.
 
 ## 6. Compute, scale & cost discipline
 
