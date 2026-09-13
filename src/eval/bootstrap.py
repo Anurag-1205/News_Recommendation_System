@@ -36,7 +36,7 @@ class CI:
 
 
 def bootstrap_ci(per_impression: list[float] | np.ndarray, iterations: int = 1000,
-                 confidence: float = 0.95, seed: int = 0) -> CI:
+                 confidence: float = 0.95, seed: int = 0, block: int = 100) -> CI:
     """Percentile bootstrap over per-impression metric values.
 
     `per_impression` is one metric value per impression — not a pooled score. The seed is
@@ -55,10 +55,13 @@ def bootstrap_ci(per_impression: list[float] | np.ndarray, iterations: int = 100
         return CI(v, v, v, 1, iterations)
 
     rng = np.random.default_rng(seed)
-    # One (iterations x n) index draw, then a single row-wise mean: the vectorised form is
-    # ~100x faster than a Python loop and matters at 1000 iterations over 73K impressions.
-    idx = rng.integers(0, n, size=(iterations, n))
-    means = values[idx].mean(axis=1)
+    # Vectorised index draws (~100x faster than a Python loop), in blocks of `block` iterations:
+    # the one-shot (iterations x n) int64 array is 1.96 GB at EB-NeRD's 244,647 impressions and
+    # got the laptop session OOM-killed (C-026). Sequential blocks consume the generator's
+    # stream in the same order as one draw, so the means — and every CI recorded before the
+    # change — are bit-identical (tests/test_bootstrap.py proves it).
+    means = np.concatenate([values[rng.integers(0, n, size=(min(block, iterations - s), n))].mean(axis=1)
+                            for s in range(0, iterations, block)])
 
     alpha = (1 - confidence) / 2
     lo, hi = np.quantile(means, [alpha, 1 - alpha])

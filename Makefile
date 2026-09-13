@@ -1,4 +1,4 @@
-.PHONY: help env fetch-small fetch-testset fetch-large fetch-mind data check-data test eval bench clean-pyc
+.PHONY: help env fetch-small fetch-testset fetch-large fetch-mind data check-data test paired eval bench clean-pyc
 .DEFAULT_GOAL := help
 
 VENV := .venv
@@ -36,6 +36,10 @@ check-data: env  ## print the data facts behind the Phase 1 feature definitions 
 
 test: env  ## run the test suite, incl. the no-leakage assertion (Q9)
 	PYTHONPATH=. $(VENV)/bin/pytest tests/ -v
+
+paired: env  ## paired bootstrap of two scores files: make paired A=a.parquet B=b.parquet [JSON=out.json] (A2 Q3.4)
+	@test -n "$(A)" -a -n "$(B)" || (echo "usage: make paired A=<scores.parquet> B=<scores.parquet> [JSON=<record.json>]"; exit 2)
+	PYTHONPATH=. $(PY) scripts/paired_compare.py $(A) $(B) $(if $(JSON),--json $(JSON))
 
 eval:  ## full two-stage metrics, slices, bootstrap CIs (A2 Q5)
 	@echo "make eval: not implemented (A2 P5)"; exit 1

@@ -88,3 +88,19 @@ def test_bootstrap_metrics_handles_several_at_once():
     out = bootstrap_metrics({"auc": [0.5, 0.6, 0.7], "mrr": [0.2, 0.3, 0.4]}, iterations=100)
     assert set(out) == {"auc", "mrr"}
     assert out["auc"].mean == pytest.approx(0.6)
+
+
+def test_bootstrap_ci_blocked_draw_is_identical_to_the_a1_one_shot_draw():
+    """P3.4a: `bootstrap_ci` now draws its resample indices in blocks of 100 iterations, because the
+    one-shot (iterations x n) int64 array is 1.96 GB at EB-NeRD's 244,647 impressions and the OOM
+    killer took the laptop session down (CONTEXT.md C-026). Every recorded CI in RESULTS.md came
+    from the one-shot draw, so the blocked draw must reproduce it bit for bit."""
+    import numpy as np
+    from src.eval.bootstrap import bootstrap_ci
+    values = np.random.default_rng(11).random(3_001)
+    got = bootstrap_ci(values, iterations=1_000, seed=0)
+    rng = np.random.default_rng(0)                                   # A1's one-shot form, verbatim
+    idx = rng.integers(0, len(values), size=(1_000, len(values)))
+    means = values[idx].mean(axis=1)
+    lo, hi = np.quantile(means, [0.025, 0.975])
+    assert (got.mean, got.lo, got.hi) == (float(values.mean()), float(lo), float(hi))
