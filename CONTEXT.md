@@ -24,10 +24,10 @@ _Last updated: 2026-09-13 by Aayush (agent: Claude Code)_
 | Phase | **P1 done** (C-014). **P2 locked** (C-018) in `src/rerank/config.FINAL`: EB-NeRD lambdarank without dwell, AUC 0.6728; MIND pointwise A1 v4, AUC 0.6747. Open for Q2: D1 framing (b). **P0 clean-clone check passed on Aayush's machine: 318 passed** (`RESULTS.md`, verification table). See `PLAN.md` §3 |
 | Team | Per **C-019**. **Anurag Kaushal**: P1 and P2 (done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS on Kaggle, paired bootstrap, the change and its ablation), P4, P5 joint, P6 joint. Anurag reviews every Q3 "beats" claim |
 | Anurag Kaushal | Next: P5 (joint), proposed as `make eval` plus the Kaggle submission pipeline for `config.FINAL`; D1 framing (b); reviewing Aayush's Q3 claims |
-| Aayush Pandey | **P0 in progress.** Done: pull, `.venv` from the pinned `requirements.txt`, suite green (318). `make` and `python3.12-venv` installed afterwards and `make test` re-run green (the venv itself was built with `uv venv --seed` + the venv's own `pip`, same interpreter and pins as `make env`). **Kaggle verified** (C-020): CLI as `aayushpandey18602`, 2× T4 + fp16 PASS, 30 h/week quota. **NRMS smoke test PASSED on Kaggle** (C-021, C-022; `RESULTS.md` P0): `external/ebnerd-benchmark` at `5164e2c`, TF/Keras, float32, 273 s/epoch on demo. `make fetch-small` done (demo + small zips). Still open: HF token → `make fetch-mind`; `ebnerd_testset.zip` (from `make fetch-large`, 1.5 GB) is required before `make data` builds EB-NeRD at all (`build_pipeline.py` returns early without it). **C-013's two corrections reviewed and agreed by Aayush (12 Sep)**: `session_len` unsafe; `n_prior_clicks_in_session` omitted (not zero-filled) for the submission model. Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4 |
+| Aayush Pandey | **P0 in progress.** Done: pull, `.venv` from the pinned `requirements.txt`, suite green (318). `make` and `python3.12-venv` installed afterwards and `make test` re-run green (the venv itself was built with `uv venv --seed` + the venv's own `pip`, same interpreter and pins as `make env`). **Kaggle verified** (C-020): CLI as `aayushpandey18602`, 2× T4 + fp16 PASS, 30 h/week quota. **NRMS smoke test PASSED on Kaggle** (C-021, C-022; `RESULTS.md` P0): `external/ebnerd-benchmark` at `5164e2c`, TF/Keras, float32, 273 s/epoch on demo. **Local data complete (13 Sep):** `make fetch-small`, `make fetch-mind` (HF login as `aayush18602`), and the new `make fetch-testset` (1.63 GB, ~2 h on the campus link) all done; `make data` builds both datasets (MIND 95,071/31,624/30,270; EB-NeRD 192,884/32,225/7,778 train/val/test rows) and is idempotent on re-run. `data/` is 6 GB (raw 2.3, interim 3.6). **C-013's two corrections reviewed and agreed by Aayush (12 Sep)**: `session_len` unsafe; `n_prior_clicks_in_session` omitted (not zero-filled) for the submission model. Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4 |
 | Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004). Both accounts verified. Aayush's laptop: Python 3.12.3, 15 GB RAM, no GPU, 36 GB free disk |
-| Blocked on | team decisions D1–D9 in `PLAN.md` §5; the scores-file format (`PLAN.md` §2) must be agreed and pinned in `SPEC.md` |
-| Next up | **Aayush:** P0 exit gate on Aayush's side is met (tests green, Kaggle verified, NRMS on demo). Remaining P0 needs Anurag: Codabench teams (step 4), Kaggle datasets for the large files (5–6), the scores-file format (8). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
+| Blocked on | team decisions D1–D9 in `PLAN.md` §5. **Scores-file format agreed 13 Sep** (Aayush proposed, Anurag amended: key `imp_row`, native `article_id`, 1-based `cand_position`, Float64 `score`, manifest with `framing`); Anurag lands it as `src/eval/scores.py` + SPEC entry + the C-NNN decision, with a round-trip acceptance test against RESULTS.md Q2 (0.6728 / 0.6747). Aayush reviews, then builds P3.4a on it |
+| Next up | **Aayush:** P0 exit gate on Aayush's side is met (tests green, Kaggle verified, NRMS on demo). Remaining P0 split 13 Sep: **step 4 done (C-023: no team feature, submit from Anurag's account)**; **Anurag → steps 5–6** (large files as Kaggle datasets, hash-verified; MINDlarge_train/dev deferred to D5) **and step 8** (`src/eval/scores.py`). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
 
 ---
 
@@ -702,7 +702,7 @@ Entry format:
 
 ### C-021 · `ebnerd-benchmark` pinned at `5164e2c`; it runs on Kaggle through a two-function polars shim, not its own pins
 - Date / author: 2026-09-13 · Aayush Pandey (Claude Code)
-- Decision: the NRMS baseline is `ebanalyse/ebnerd-benchmark` at commit
+- Decision: the NRMS baseline is `ebnerd-benchmark` (brief URL `jppol-ai/`, cloned via the `ebanalyse/` redirect) at commit
   `5164e2ce7c92b99cbcb853d5f804cc95f0232b2f` (2026-03-16, "dependencies updates"), cloned into
   `external/ebnerd-benchmark` (gitignored). On Kaggle it runs against the image's own
   TensorFlow 2.20 / Keras 3.13 / polars 1.35 / numpy 2.0 / transformers 5.0, with
@@ -745,6 +745,55 @@ Entry format:
   baseline, possible later as an explicitly labelled variant if the quota demands it); running
   on P100 (no tensor cores either way).
 - Affects: `scripts/kaggle/nrms_smoke/nrms_smoke.py` (policy probe with fallback), P3.1 budget
+- Status: active
+
+### C-023 · Codabench has no team feature: submissions go from Anurag's account, the report names both
+- Date / author: 2026-09-13 · Aayush Pandey (checked by hand on Codabench; logged by Claude Code)
+- Decision: both competitions (MIND 13967, RecSys 2024 / EB-NeRD 2469) are entered from
+  **Anurag's Codabench account**, which has been registered and approved since A1. The design
+  note and README name both members and state this. P0 step 4 is closed.
+- Why: neither competition page offers a team/participants feature, so a shared entry is not
+  possible. Anurag's account is already approved; a new registration for Aayush would add a
+  day-plus approval wait against the Wed 16 Sep first-submission target for no gain.
+- Consequence: the P5 submission runs (C-019: Anurag's Kaggle quota, joint P5) also upload
+  from Anurag's account. Leaderboard screenshots for Q5 show that account name; the note explains
+  why. Aayush's Codabench registration is not needed and is not pursued.
+- Alternatives rejected: registering Aayush too and alternating submitters (splits the
+  submission history across two accounts for no benefit).
+- Affects: P5 submission workflow, README team table, design note
+- Status: active
+
+### C-024 · D3 decided: a native NRMS per dataset; MIND-small on Kaggle as a private dataset; a dated fallback
+- Date / author: 2026-09-13 · decision by Aayush Pandey in plan mode; logged by Claude Code
+- Decision:
+  - **EB-NeRD:** NRMS from `jppol-ai/ebnerd-benchmark` at `5164e2c` (the brief's starter-code
+    URL; `ebanalyse/` 301-redirects to it, same history). Already running (C-021, C-022).
+  - **MIND:** NRMS from `recommenders-team/recommenders` (`recommenders/models/newsrec`), the
+    brief's "MIND baseline" (A2.pdf Q3.1: "NRMS from the ebnerd-benchmark repo, **or the MIND
+    baseline**"). Pinned at `0bb4b3690941ffb668118e31ccaf8a7d19f8212a` (HEAD on 13 Sep).
+    Vendored `--no-deps` into the kernel: its `install_requires` pins `numpy<2`,
+    `transformers<5`, and its GPU extra `tensorflow<2.16`, none of which the Kaggle image
+    (numpy 2.0.2, transformers 5.0, TF 2.20 / Keras 3) satisfies. `newsrec` is TF1-style Keras
+    (`tf.compat.v1.keras`, `set_session`), so it runs under `tf-keras` with
+    `TF_USE_LEGACY_KERAS=1`.
+  - **Data on Kaggle:** EB-NeRD small from the public S3 bucket inside the kernel (as the smoke
+    test). MIND small as a **private Kaggle dataset** on Aayush's account, built from the
+    official `MINDsmall_train.zip` + `MINDsmall_dev.zip` on disk (80 MB); shared with Anurag.
+    `MINDsmall_utils.zip` (GloVe `embedding.npy`, `word_dict.pkl`, `uid2index.pkl`, `nrms.yaml`)
+    from `huggingface.co/datasets/Recommenders/MIND` (ungated, HTTP 302 on 13 Sep; the old Azure
+    blob `recodatasets.z20.web.core.windows.net` no longer answers), sha256 recorded by the kernel.
+  - **Fallback, dated:** if the MIND-native kernel has not trained one epoch by **Mon 14 Sep
+    20:00 IST**, MIND runs on the EB-NeRD implementation through an adapter from our unified
+    frames, and that reversal gets its own entry.
+- Why: PLAN.md D3 recommended one implementation for both. The brief names both options, and
+  Aayush chose the native MIND baseline as closer to "the official baseline" for MIND (GloVe,
+  the MIND paper's own setup). The agent recorded the counter-case — one codebase, one shim,
+  identical hyper-parameters, and the adapter is ~40 lines because `src/rerank/mind.load_behaviors`
+  already yields EB-NeRD-shaped lists — and the Keras-3 risk; the dated fallback bounds that risk.
+- Protocol and scores-file contract: `SPEC.md` §13.2–§13.3 (fit on the shipped train split,
+  score every validation impression on its full slate; `imp_row` key; Float64 scores).
+- Affects: `SPEC.md` §13 (new), `src/baselines/nrms_data.py` (new), `scripts/kaggle/nrms_*`,
+  `scripts/kaggle/nrms_smoke` (URL), P3.1 schedule
 - Status: active
 
 ---

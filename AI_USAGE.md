@@ -602,3 +602,31 @@ human-written code. Both team members append here. Chat exports are submitted wi
     `kaggle kernels logs` instead.
   - Not done: `make fetch-mind` (needs Aayush's HF login), `make data` (needs
     `ebnerd_testset.zip`), P0 steps 4/5/6/8 (need Anurag).
+
+### 2026-09-13 · Aayush Pandey · Claude Code (Opus 5) · Local data: fetch-testset target, MIND + EB-NeRD `make data`
+- Asked: "can we start ebnerd_testset.zip then?", "done it says login successfull", "is the
+  ebnerd_testset.zip download done?".
+- Produced (AI-generated, reviewed by Aayush): `scripts/fetch_data.sh testset` mode and the
+  `make fetch-testset` target (the `large` mode queues 3.6 GB of P5-only files behind the one
+  file `make data` needs); `CONTEXT.md` §1 data row; this entry. Downloads run detached
+  (`setsid nohup`) with logs in `data/logs/`.
+- Verified by: `unzip -t` clean on all six zips; `make data` exit 0 for both datasets, row counts
+  in `CONTEXT.md` §1; a second `make data` skips every stage ("already present", 0 s).
+- Failed / corrected: nothing failed. Observed: HuggingFace's CDN delivered MIND (690 MB) in
+  ~70 s while the EB-NeRD S3 bucket ran at 17–40 KB/s from the same laptop, so the fetch
+  script's slow-link defences matter only for S3. The `hf` CLI printed its help screen when
+  run without a subcommand, which Aayush read as an error; not one.
+
+### 2026-09-13 · Aayush Pandey · Claude Code (Opus 5) · Scores-file format agreed with Anurag; Codabench check (P0.4, P0.8)
+- Asked: "what should i ask him?" (scores-file format proposal for Anurag), then Anurag's reply
+  pasted in, then "done step 4 is done".
+- Produced: the proposal text (AI-drafted, sent by Aayush); the reply agreeing to Anurag's three
+  amendments plus one addition (NRMS must be scored on *our* temporal split so `imp_row` exists);
+  `CONTEXT.md` §1 rows and C-023 (Codabench outcome, checked by Aayush by hand).
+- Verified by: n/a (coordination, not code). The format itself is verified by Anurag's round-trip
+  acceptance test when `src/eval/scores.py` lands.
+- Failed / corrected: the agent's proposal keyed on `impression_id`, which Anurag showed is not
+  unique in the EB-NeRD test file (200,000 beyond-accuracy rows carry id 0), typed `article_id`
+  as Int32 (MIND's are strings), and assumed 0-based `cand_position` (the code and the trained
+  model use 1-based). All three amended per his reply; the agent had not checked the test file
+  before proposing.

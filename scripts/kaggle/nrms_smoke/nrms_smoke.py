@@ -41,7 +41,7 @@ def sh(cmd):
 sh(f"wget -q {S3}/ebnerd_demo.zip -O {WORK}/ebnerd_demo.zip")
 sh(f"mkdir -p {DATA}/ebnerd_demo && unzip -q -o {WORK}/ebnerd_demo.zip -d {DATA}/ebnerd_demo")
 sh(f"find {DATA} -maxdepth 3 | sort")
-sh(f"git clone -q https://github.com/ebanalyse/ebnerd-benchmark {WORK}/ebnerd-benchmark"
+sh(f"git clone -q https://github.com/jppol-ai/ebnerd-benchmark {WORK}/ebnerd-benchmark"
    f" && cd {WORK}/ebnerd-benchmark && git checkout -q {BENCH_COMMIT} && git rev-parse HEAD")
 sys.path.insert(0, f"{WORK}/ebnerd-benchmark/src")
 stage("fetch")

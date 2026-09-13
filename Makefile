@@ -1,4 +1,4 @@
-.PHONY: help env fetch-small fetch-large fetch-mind data check-data test eval bench clean-pyc
+.PHONY: help env fetch-small fetch-testset fetch-large fetch-mind data check-data test eval bench clean-pyc
 .DEFAULT_GOAL := help
 
 VENV := .venv
@@ -18,6 +18,9 @@ env: $(VENV)/bin/activate  ## create .venv and install pinned deps
 
 fetch-small:  ## EB-NeRD demo+small (~0.10 GB) — needed by P1
 	./scripts/fetch_data.sh small
+
+fetch-testset:  ## EB-NeRD test set only (~1.5 GB) — the minimum `make data` needs for EB-NeRD
+	./scripts/fetch_data.sh testset
 
 fetch-large:  ## EB-NeRD large/test/embeddings (~5.1 GB) — needed by P5
 	./scripts/fetch_data.sh large

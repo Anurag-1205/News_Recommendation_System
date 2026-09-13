@@ -883,3 +883,99 @@ Framing (b) remains to be built and measured.
   - on a toy where one feature separates impressions and another decides the click inside them,
     the ranker puts the clicked candidate first in ≥ 95% of impressions.
 - **The ablation trigger** (`drop_reasons`) is tested on its three cases.
+
+---
+
+## 13 · A2 Phase 3.1 — The NRMS baseline, reproduced (Q3.1)
+
+Owner: Aayush Pandey. Decisions: CONTEXT.md C-021 (benchmark pin + polars shim), C-022
+(float32), C-024 (D3: native implementation per dataset; how data reaches Kaggle). Numbers:
+`RESULTS.md` Q3.1.
+
+**What "reproduced" means here (PLAN.md P3.1).** Our number next to the published number for
+the same model, with every departure listed and its expected direction stated. It does not
+have to match; it has to be explained. Alongside, a scores file per split so the paired
+bootstrap (§14, P3.4a) can compare NRMS with the locked reranker impression by impression.
+
+### 13.1 · The two baselines (PLAN D3, C-024)
+
+| | EB-NeRD | MIND |
+|---|---|---|
+| Implementation | NRMS from `jppol-ai/ebnerd-benchmark` at `5164e2c` (`external/ebnerd-benchmark`) | NRMS from `recommenders-team/recommenders` (`recommenders/models/newsrec`), commit pinned in C-024 — the brief's "MIND baseline" |
+| Framework | TensorFlow 2.20 / Keras 3 on Kaggle's image, via `src/baselines/ebrec_compat` | TF1-style Keras: vendored `--no-deps`, run under `tf-keras` (`TF_USE_LEGACY_KERAS=1`) |
+| Published recipe followed | README: 5 epochs, batch 32, history 20, npratio 4, xlm-roberta-large word embeddings, title 30 tokens, 20 heads × 20, attention 200, Adam 1e-4, dropout 0.2 | quick-start: 5 epochs, batch 32, history 50, npratio 4, GloVe-300d `embedding.npy` + `word_dict.pkl` from `MINDsmall_utils.zip`, title 30 |
+| Word embeddings | passed to the model (the published script builds them and then omits them, C-021) | as published |
+| Precision | float32 (C-022) | float32 |
+| Seeds | sampling 123, model 42; `tf.config.experimental.enable_op_determinism()` | seed 42; determinism on |
+
+**Fallback, dated.** If the MIND-native kernel has not trained one epoch on `MINDsmall_train`
+by Mon 14 Sep 20:00 IST, MIND is served by the EB-NeRD implementation through an adapter from
+our unified frames (`src/rerank/mind.load_behaviors` already yields history, candidate and label
+lists per impression). The reversal is logged as its own C-NNN. Either way the model is NRMS
+with the same hyper-parameters, so the comparison stays like-for-like.
+
+### 13.2 · Protocol: the reranker's split, every impression, the full slate
+
+The comparison with `config.FINAL` is only valid on the same impressions, so NRMS uses §12's
+protocol exactly:
+
+| | fit on | evaluate on | impressions scored |
+|---|---|---|---|
+| EB-NeRD | `ebnerd_small/train` (7 days) | `ebnerd_small/validation` (the next 7 days) | **all 244,647**, full slates |
+| MIND | `MINDsmall_train` | `MINDsmall_dev` | **all 73,152**, full slates |
+
+- The published EB-NeRD script fits on train ∪ validation and holds out the last day. We fit on
+  **train only**, because validation is the evaluation split; this is the first listed
+  departure. Internal early stopping uses the last training day, as the script does.
+- The reranker was evaluated on a seeded 100,000-impression sample of EB-NeRD validation
+  (§12). NRMS scores every impression; the paired bootstrap takes the intersection by `imp_row`.
+- Training samples are the benchmark's `sampling_strategy_wu2019` (one clicked + npratio
+  negatives per slate). **Evaluation is never on sampled slates**: the smoke test's metrics
+  (`RESULTS.md` P0) were on 5-candidate samples and are not comparable with anything here.
+- `imp_row` is the row index of the split file in file order (`behaviors.parquet`,
+  `behaviors.tsv`), assigned **before** any join, exactly as `src/rerank/{ebnerd,mind}.load_behaviors`
+  assign it. `tests/test_nrms_data.py` proves the two agree row for row.
+- NRMS reads only the user's history (strictly before the split) and the slate. No Phase 1
+  feature, no unsafe feature (C-013), so the Q9 "with/without serving-unavailable features"
+  row does not apply to the baseline and is stated as such.
+
+### 13.3 · The scores file (the P0.8 contract, agreed 13 Sep with Anurag Kaushal)
+
+Written by every system, read by every harness. Anurag's `src/eval/scores.py` is the writer,
+reader and validator; until it lands, `src/baselines/nrms_data.scores_frame` produces the same
+frame and the validator is run on the NRMS files retroactively.
+
+```
+Parquet, one row per (impression, candidate); all candidates of every impression present
+imp_row        UInt32   row index of the split file, the join key (impression_id is not unique:
+                        200,000 EB-NeRD test rows carry impression_id 0)
+impression_id  native   EB-NeRD UInt32, MIND Int64 — kept for the submission writer
+article_id     native   EB-NeRD Int32, MIND Utf8 ("N28682")
+cand_position  Int64    1-based slot in the original slate (a live feature in config.FINAL)
+score          Float64  unnormalised; metrics are within-impression
+sorted by (imp_row, cand_position)
+labels are NOT in the file: readers join them by (imp_row, cand_position) from the split
+path: data/scores/{dataset}/{split}/{system}.parquet  +  {system}.json manifest with
+      dataset, split, system, framing ("in-impression" | "retrieved-topk"), n_rows,
+      n_impressions, git commit, seeds, the command, run time
+```
+
+A harness must refuse to pair two files whose manifests differ in `dataset`, `split` or
+`framing`.
+
+### 13.4 · Verification
+
+- `tests/test_nrms_data.py` (local, no TF): (a) `ebnerd_behaviors` agrees with
+  `src.rerank.ebnerd.load_behaviors` on `imp_row`, `impression_id` and the slate lists, row for
+  row, on the first 300 rows of the real split; (b) labels from `article_ids_clicked` equal the
+  reranker frame's `label` joined on (`imp_row`, `cand_position`); (c) `scores_frame` on a toy
+  3-impression frame yields the exact rows, dtypes and order of §13.3; (d) a slate with a
+  duplicated `article_id` keeps both rows.
+- On Kaggle, before any long run, each printed in the kernel log and cited in `RESULTS.md`:
+  (1) determinism — demo, 1 epoch, twice: identical `val_AUC` to every printed digit;
+  (2) our `src/eval/metrics` and the benchmark's `MetricEvaluator` agree to 1e-6 on the same
+  scores; (3) the scores frame has Σ slate lengths rows and every `imp_row` in 0..N−1.
+- Cost is measured, not assumed: step time on the first 200 steps decides whether
+  xlm-roberta-large stays (departure recorded if it does not); the quota consumed by every run
+  is in `RESULTS.md`.
+- A reproduction run is one kernel push, recorded with its exact command and commit.

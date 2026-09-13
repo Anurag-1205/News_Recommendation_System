@@ -1,0 +1,7 @@
+{
+  "title": "MIND-small (official zips) for A2",
+  "id": "aayushpandey18602/mind-small-official",
+  "licenses": [{"name": "other"}],
+  "subtitle": "Official MINDsmall_train.zip + MINDsmall_dev.zip, unmodified (A2 baseline)",
+  "description": "Unmodified official archives, uploaded so Kaggle kernels can train the NRMS baseline (CS4.406 A2, CONTEXT.md C-024). sha256 of each file is in scripts/kaggle/mind_small_dataset/SHA256SUMS in the repo."
+}

@@ -2,6 +2,7 @@
 # Raw-data fetcher. Downloads only; extraction is `make data`'s job (A1 Q1: rebuild from raw).
 #
 #   ./scripts/fetch_data.sh small   ~0.10 GB  EB-NeRD demo+small          -> needed by P1, run now
+#   ./scripts/fetch_data.sh testset ~1.52 GB  EB-NeRD test set only       -> needed by `make data` (build_pipeline.py)
 #   ./scripts/fetch_data.sh large   ~5.10 GB  EB-NeRD large/test/embeds   -> needed by P5 (25 Aug)
 #   ./scripts/fetch_data.sh mind    gated     MIND via HuggingFace        -> needs `hf auth login`
 #
@@ -67,6 +68,12 @@ case "${1:-}" in
     get $S3/ebnerd_demo.zip                                    # 0.02 GB
     get $S3/ebnerd_small.zip                                   # 0.08 GB
     ;;
+  testset)
+    # The one large file `make data` cannot do without: build_pipeline.py returns early for
+    # EB-NeRD unless ebnerd_testset.zip is present. Split out so a laptop on a slow link can
+    # fetch it alone (overnight) without queueing the other 3.6 GB behind it.
+    get $S3/ebnerd_testset.zip                                 # 1.52 GB
+    ;;
   large)
     # Ordered by what the submission actually blocks on, not by size.
     # ebnerd_testset.zip carries its own articles.parquet AND the 13.5M unlabelled test
@@ -106,7 +113,7 @@ case "${1:-}" in
     get $HF/MINDlarge_test.zip    # 576.6 MB — the Codabench test set
     ;;
   *)
-    echo "usage: $0 {small|large|mind}" >&2; exit 2
+    echo "usage: $0 {small|testset|large|mind}" >&2; exit 2
     ;;
 esac
 
