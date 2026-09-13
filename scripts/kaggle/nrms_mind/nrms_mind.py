@@ -14,7 +14,8 @@ Modes:
                     dropout 0.2 (nrms.yaml), seed 42. Data from the private dataset
                     aayushpandey18602/mind-small-official (official zips, hashes in the repo).
 Departures from examples/00_quick_start/nrms_MIND.ipynb, each printed:
-  * op determinism on (tf.config.experimental.enable_op_determinism) before the v1 session;
+  * op determinism on (tf.config.experimental.enable_op_determinism) before the v1 session, and
+    Python's `random` seeded (the package leaves it unseeded; it draws the negatives);
   * runs under tf-keras (TF_USE_LEGACY_KERAS=1) on TF 2.20, the package vendored --no-deps;
   * after training, run_fast_eval's per-impression predictions are written as the scores file
     (impr_index is the 0-based behaviors.tsv row = imp_row, proven in the U4 smoke), and the
@@ -89,6 +90,10 @@ hparams = prepare_hparams(f["yaml"], wordEmb_file=f["emb"], wordDict_file=f["wdi
 print("HPARAMS", str(hparams)[:600])
 model = NRMSModel(hparams, MINDIterator, seed=SEED)
 print("params", model.model.count_params())
+# The package seeds TF and numpy (base_model.__init__) but not Python's `random`, which
+# `newsrec_utils.newsample` uses to draw the npratio negatives: demo twin runs v1/v2 differed
+# (AUC 0.5805 vs 0.5784). Seeding it here makes the sampling sequence reproducible.
+import random; random.seed(SEED); np.random.seed(SEED)
 t = time.time()
 model.fit(f["train_news"], f["train_beh"], f["valid_news"], f["valid_beh"])
 train_seconds = time.time() - t
