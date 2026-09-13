@@ -25,7 +25,7 @@ _Last updated: 2026-09-14 by Aayush (agent: Claude Code)_
 | Team | Per **C-019**. **Anurag Kaushal**: P1 and P2 (done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS on Kaggle, paired bootstrap, the change and its ablation), P4, P5 joint, P6 joint. Anurag reviews every Q3 "beats" claim |
 | Anurag Kaushal | Next: P5 (joint), proposed as `make eval` plus the Kaggle submission pipeline for `config.FINAL`; D1 framing (b); reviewing Aayush's Q3 claims |
 | Aayush Pandey | **P0 in progress.** Done: pull, `.venv` from the pinned `requirements.txt`, suite green (318). `make` and `python3.12-venv` installed afterwards and `make test` re-run green (the venv itself was built with `uv venv --seed` + the venv's own `pip`, same interpreter and pins as `make env`). **Kaggle verified** (C-020): CLI as `aayushpandey18602`, 2× T4 + fp16 PASS, 30 h/week quota. **NRMS smoke test PASSED on Kaggle** (C-021, C-022; `RESULTS.md` P0): `external/ebnerd-benchmark` at `5164e2c`, TF/Keras, float32, 273 s/epoch on demo. **Local data complete (13 Sep):** `make fetch-small`, `make fetch-mind` (HF login as `aayush18602`), and the new `make fetch-testset` (1.63 GB, ~2 h on the campus link) all done; `make data` builds both datasets (MIND 95,071/31,624/30,270; EB-NeRD 192,884/32,225/7,778 train/val/test rows) and is idempotent on re-run. `data/` is 6 GB (raw 2.3, interim 3.6). **C-013's two corrections reviewed and agreed by Aayush (12 Sep)**: `session_len` unsafe; `n_prior_clicks_in_session` omitted (not zero-filled) for the submission model. Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4 |
-| Compute | Kaggle 2× T4 (fp16) for GPU and full-scale runs; laptop for dev/tests (C-004). Both accounts verified. Aayush's laptop: Python 3.12.3, 15 GB RAM, no GPU, 36 GB free disk |
+| Compute | Kaggle 2× T4 for GPU and full-scale runs; laptop for dev/tests (C-004). Verified accounts: Anurag's (P5), Aayush main `aayushpandey18602` (22.3 h left) and Aayush alt `aayushpandey602` (30 h) — C-027. Aayush's laptop: Python 3.12.3, 15 GB RAM, no GPU, 36 GB free disk |
 | Blocked on | team decisions D1–D9 in `PLAN.md` §5. **Scores-file format agreed 13 Sep** (Aayush proposed, Anurag amended: key `imp_row`, native `article_id`, 1-based `cand_position`, Float64 `score`, manifest with `framing`); Anurag lands it as `src/eval/scores.py` + SPEC entry + the C-NNN decision, with a round-trip acceptance test against RESULTS.md Q2 (0.6728 / 0.6747). Aayush reviews, then builds P3.4a on it |
 | Next up | **Aayush, P3.1 DONE 14 Sep 00:40 (C-025):** NRMS reproduced on both datasets, score files verified locally, RESULTS.md Q3.1 written with the published comparison and gap. **P3.4a DONE 14 Sep (C-026):** `make paired A=… B=…` is the Q3 judge, calibrated and validated on the real file; `bootstrap_ci` OOM fix. Next: **P3.2 plan** (D4: recency/freshness-aware NRMS, evidence in C-025); reranker-vs-NRMS runs when Anurag's `config.FINAL` scores file lands. Earlier in the evening: U1 (SPEC §13, C-024) and U2 (`src/baselines/nrms_data`, 9 oracles) committed at `5a6bb76`. **MIND-native go/no-go resolved: GO** — `scripts/kaggle/nrms_mind_smoke` v3 trained one epoch of the recommenders NRMS on MINDsmall_train under tf-keras (1,041 s train, dev group_auc 0.6489 after 1 epoch, alignment oracle held on all 73,152 dev impressions; log `data/logs/kaggle/nrms_mind_smoke_v3.log`). No fallback. Kernels `nrms_ebnerd` and `nrms_mind` are in their DEMO_CHECK determinism runs; full runs follow (EB-NeRD ≈ 3.5 h incl. ~65 min of full-slate scoring measured at 15.6 ms/impression; MIND ≈ 2 h). Remaining P0 split 13 Sep: **step 4 done (C-023: no team feature, submit from Anurag's account)**; **Anurag → steps 5–6** (large files as Kaggle datasets, hash-verified; MINDlarge_train/dev deferred to D5) **and step 8** (`src/eval/scores.py`). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
 
@@ -858,6 +858,28 @@ Entry format:
 - Affects: `src/eval/bootstrap.py`, `src/eval/paired.py` (new), `src/rerank/common.py` (one
   line), `scripts/paired_compare.py` (new), `Makefile` (`paired`), `SPEC.md` §14,
   `tests/test_paired.py` (new), `tests/test_bootstrap.py`
+- Status: active
+
+### C-027 · A second Kaggle account (`aayushpandey602`) doubles the P3 GPU budget; ablation variants run in parallel
+- Date / author: 2026-09-14 · Aayush Pandey (Claude Code)
+- Decision: P3.2–3.4 variant runs are split across two of Aayush's Kaggle accounts —
+  `aayushpandey18602` (main, 22.3 h left) and `aayushpandey602` (alt, 30 h) — one dataset per
+  account, so the two rows of the ablation (baseline+change; change with a component removed)
+  take ≈ 5 h wall each instead of ≈ 12 h sequential. Anurag's account stays reserved for P5
+  inference (C-019).
+- Verified: alt token at `~/.kaggle/alt/kaggle.json` (mode 600), selected per call with
+  `KAGGLE_CONFIG_DIR`; `scripts/kaggle/gpu_check` PASS on the alt account (ledger,
+  `a2-gpu-check` v1 (aayushpandey602)); the private dataset `mind-small-official` is shared
+  with it (collaborator, read).
+- Mechanics: `scripts/kaggle/alt_account.sh push|status|logs|quota` runs a committed kernel
+  folder from the alt account by rewriting the `id` in a temp copy of `kernel-metadata.json`;
+  the committed metadata keeps the main account. `scripts/kaggle/ledger.py --account alt`
+  fetches that account's log and tags the row with the username. Which account ran a row is
+  therefore always visible in the ledger; nothing scientific changes — same commit, seeds, data.
+- The baseline rows (C-025) are **not** rerun: the ablation is valid as long as variants share
+  the baseline's commit of the training recipe, seeds, epochs and data. Do not touch the shared
+  recipe; if it must change, the baseline reruns too.
+- Affects: `scripts/kaggle/alt_account.sh` (new), `scripts/kaggle/ledger.py`, P3.2–3.4 schedule
 - Status: active
 
 ---

@@ -9,7 +9,8 @@ data/logs/kaggle/<slug>_<tag>.log (gitignored: logs are large), and extracts wha
 print on purpose — KNOBS, repo/benchmark commits, STAGE timings, HISTORY, TRAIN_SECONDS,
 METRICS_*, EVAL_*, RESULT, or the last Traceback line — into a ledger row that is committed.
 The ledger is the place to look before re-running anything: every number, its commit and its
-cost, in one table (CLAUDE.md rule 3).
+cost, in one table (CLAUDE.md rule 3). Runs from the second account (`--account alt`) carry the
+account name in the kernel column; runs from the main account carry none.
 """
 import argparse, ast, json, re, subprocess, sys
 from datetime import datetime
@@ -73,11 +74,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("slug"); ap.add_argument("tag"); ap.add_argument("--note", default="")
     ap.add_argument("--no-fetch", action="store_true", help="use the already-saved log")
+    ap.add_argument("--account", default="main", choices=["main", "alt"],
+                    help="which Kaggle account ran it: main = aayushpandey18602, alt = ~/.kaggle/alt (C-027)")
     a = ap.parse_args()
     LOGS.mkdir(parents=True, exist_ok=True)
-    log = LOGS / f"{a.slug}_{a.tag}.log"
+    import os
+    env = dict(os.environ)
+    user = USER
+    if a.account == "alt":
+        env["KAGGLE_CONFIG_DIR"] = os.path.expanduser("~/.kaggle/alt")
+        user = json.load(open(os.path.expanduser("~/.kaggle/alt/kaggle.json")))["username"]
+    log = LOGS / (f"{a.slug}_{a.tag}.log" if a.account == "main" else f"{a.slug}_{a.tag}_{user}.log")
     if not a.no_fetch:
-        raw = subprocess.run([str(ROOT / ".venv/bin/kaggle"), "kernels", "logs", f"{USER}/{a.slug}"], capture_output=True, text=True).stdout
+        raw = subprocess.run([str(ROOT / ".venv/bin/kaggle"), "kernels", "logs", f"{user}/{a.slug}"], capture_output=True, text=True, env=env).stdout
         log.write_text(raw)
     x = extract(events(log.read_text()))
     total = max(x["stages"].values()) if x["stages"] else None
@@ -94,7 +103,8 @@ def main():
     stages = " · ".join(f"{k} {v}s" for k, v in x["stages"].items())
     outcome = x["outcome"] if x["outcome"] != "ERROR" else f"ERROR: {x['error']}"
     notes = "; ".join(x.get("notes", []) + ([x["departure"]] if x.get("departure") else []) + ([x["step_time"]] if x.get("step_time") else []) + ([a.note] if a.note else []))
-    row = (f"| {datetime.now():%Y-%m-%d %H:%M} | `{a.slug}` {a.tag} | {x.get('repo_commit', '—')} | {mode} | "
+    acct = "" if a.account == "main" else f" ({user})"
+    row = (f"| {datetime.now():%Y-%m-%d %H:%M} | `{a.slug}` {a.tag}{acct} | {x.get('repo_commit', '—')} | {mode} | "
            f"{outcome[:160]} | {key_s} {ci_s} | {x.get('train_seconds', '—')} | {total if total is not None else '—'} | "
            f"{stages} | {notes} | `{log.relative_to(ROOT)}` |\n")
     if not LEDGER.exists():
