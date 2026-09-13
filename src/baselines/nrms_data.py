@@ -4,7 +4,7 @@ Two jobs, both keyed by `imp_row` = the row index of the split file in file orde
 before any join, exactly as `src.rerank.ebnerd.load_behaviors` assigns it (parity is tested):
 
 * `ebnerd_behaviors`: one row per impression in the shape the benchmark's `NRMSDataLoader`
-  expects — `article_ids_fixed` (history, left-padded with 0 to `history_size`),
+  expects — `article_id_fixed` (history, left-padded with 0 to `history_size`),
   `article_ids_inview`, `labels` (0/1 per slot, from `article_ids_clicked`) — plus our keys.
 * `scores_frame`: per-slate score lists -> the agreed scores file, one row per candidate,
   `cand_position` 1-based, sorted by (`imp_row`, `cand_position`).
@@ -40,7 +40,7 @@ def ebnerd_behaviors(split_dir: Path, *, history_size: int, limit: int | None = 
 
     Columns: `imp_row`, `impression_id`, `user_id`, `impression_time`, `article_ids_inview`,
     `article_ids_clicked` (absent on the unlabelled test file), `labels` (with it), and
-    `article_ids_fixed` from `history.parquet` (an empty list for a user without history).
+    `article_id_fixed` from `history.parquet` (an empty list for a user without history).
     """
     split_dir = Path(split_dir)
     lf = pl.scan_parquet(split_dir / "behaviors.parquet")
@@ -49,13 +49,13 @@ def ebnerd_behaviors(split_dir: Path, *, history_size: int, limit: int | None = 
     beh = (lf.select(cols).head(limit) if limit else lf.select(cols)).collect().with_row_index("imp_row")
 
     hist = (pl.scan_parquet(split_dir / "history.parquet")
-            .select("user_id", pl.col("article_id_fixed").alias("article_ids_fixed"))
+            .select("user_id", pl.col("article_id_fixed"))
             .filter(pl.col("user_id").is_in(beh["user_id"].implode()))
             .collect())
-    hist = truncate_history(hist, "article_ids_fixed", history_size, padding_value=0)
+    hist = truncate_history(hist, "article_id_fixed", history_size, padding_value=0)
     beh = beh.join(hist, on="user_id", how="left", maintain_order="left")
-    pad = pl.lit([0] * history_size, dtype=beh["article_ids_fixed"].dtype)
-    beh = beh.with_columns(pl.col("article_ids_fixed").fill_null(pad))
+    pad = pl.lit([0] * history_size, dtype=beh["article_id_fixed"].dtype)
+    beh = beh.with_columns(pl.col("article_id_fixed").fill_null(pad))
 
     if labelled:
         # 0/1 per slot by membership of the clicked set: the same rule as the reranker frame.

@@ -50,7 +50,7 @@ def test_labels_match_reranker_candidate_frame():
 @needs_data
 def test_history_is_left_padded_to_history_size():
     ours = ebnerd_behaviors(SMALL / "validation", history_size=20, limit=300)
-    lens = ours["article_ids_fixed"].list.len().unique().to_list()
+    lens = ours["article_id_fixed"].list.len().unique().to_list()
     assert lens == [20]
 
 
@@ -97,3 +97,24 @@ def test_truncate_history_matches_benchmark_docstring():
     df = pl.DataFrame({"id": [1, 2, 3], "history": [["a", "b", "c"], ["d", "e", "f", "g"], ["h", "i"]]})
     assert truncate_history(df, "history", 3)["history"].to_list() == [["a", "b", "c"], ["e", "f", "g"], ["h", "i"]]
     assert truncate_history(df, "history", 3, "-")["history"].to_list() == [["a", "b", "c"], ["e", "f", "g"], ["-", "h", "i"]]
+
+
+# ---- the column names the benchmark's dataloader reads ---------------------------------------------
+
+def test_columns_match_benchmark_constants():
+    """Run v1 of the EB-NeRD kernel died on `article_ids_fixed` vs the benchmark's
+    `article_id_fixed`: the parity tests compared values, never names. The names come from
+    ebrec's constants when external/ is checked out, else the literals they had at 5164e2c."""
+    try:
+        import sys
+        sys.path.insert(0, "external/ebnerd-benchmark/src")
+        from ebrec.utils._constants import (DEFAULT_HISTORY_ARTICLE_ID_COL as HIST, DEFAULT_INVIEW_ARTICLES_COL as INVIEW,
+                                            DEFAULT_CLICKED_ARTICLES_COL as CLICKED, DEFAULT_LABELS_COL as LABELS,
+                                            DEFAULT_USER_COL as USER, DEFAULT_IMPRESSION_TIMESTAMP_COL as TS)
+    except ImportError:
+        HIST, INVIEW, CLICKED, LABELS, USER, TS = ("article_id_fixed", "article_ids_inview", "article_ids_clicked",
+                                                   "labels", "user_id", "impression_time")
+    if (SMALL / "validation" / "behaviors.parquet").exists():
+        cols = set(ebnerd_behaviors(SMALL / "validation", history_size=20, limit=5).columns)
+        assert {HIST, INVIEW, CLICKED, LABELS, USER, TS, "imp_row", "impression_id"} <= cols
+    assert HIST == "article_id_fixed"     # the literal the adapter writes
