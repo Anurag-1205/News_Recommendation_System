@@ -18,7 +18,7 @@ case "$cmd" in
   push)
     src=$1; shift
     stage=$(mktemp -d); trap 'rm -rf "$stage"' EXIT
-    cp "$src"/* "$stage"/
+    find "$src" -maxdepth 1 -type f -exec cp {} "$stage"/ ;
     sed -i "s|\"id\": \"$MAIN/|\"id\": \"$ALT/|" "$stage/kernel-metadata.json"
     grep '"id"' "$stage/kernel-metadata.json"
     .venv/bin/kaggle kernels push -p "$stage" "$@"
