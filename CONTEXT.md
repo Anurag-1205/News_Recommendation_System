@@ -882,6 +882,28 @@ Entry format:
 - Affects: `scripts/kaggle/alt_account.sh` (new), `scripts/kaggle/ledger.py`, P3.2–3.4 schedule
 - Status: active
 
+### C-028 · D4 decided: the one principled change is a candidate-freshness term in NRMS; prediction pre-registered
+- Date / author: 2026-09-14 · decision by Aayush Pandey in plan mode; logged by Claude Code
+- Decision: `score = user · news + g(freshness)`, `g` = Dense(8, relu) → Dense(1) on
+  `(x, unknown)` where `x` is the standardised `log1p(freshness_hours)` from §11.8's
+  `freshness_batch` — the reranker's own feature, same sources, same strict `< t` rule. Nothing
+  else in the recipe changes (SPEC §15). Ablation: baseline (reused) / +freshness (one run per
+  dataset) / +freshness scored with the term masked (no training).
+- Why: C-025's asymmetry (NRMS −0.113 vs the reranker on EB-NeRD, −0.008 on MIND) plus A1's
+  finding that `age_hours` dominates EB-NeRD (+0.125 permutation importance) point at exactly
+  the signal NRMS lacks. Options named to Aayush: (A) this term; (B) A plus recency-decayed
+  history attention (two components, 3 rows, ≈ 18.6 h GPU, attention-layer edits in two
+  codebases, split A1 evidence); (C) a category embedding in the news encoder (addresses a
+  different gap). Aayush chose A: strongest evidence, one code path in both implementations,
+  cheapest (≈ 5 h wall on the two accounts, C-027), easiest to explain in the exam.
+- **Prediction, recorded before any run:** EB-NeRD Δ AUC ≥ +0.03 with a paired CI excluding 0;
+  MIND Δ AUC within ±0.01, CI may include 0. The outcome is reported against this either way.
+- Serving-time honesty: the feature is available at serving time on both datasets; the
+  "with/without serving-unavailable features" row is not applicable and is stated as such.
+- Affects: `SPEC.md` §15, `src/baselines/nrms_fresh_*` (new), `scripts/kaggle/nrms_*_fresh/`
+  (new), P3.2–3.4 schedule (target Tue 16 Sep)
+- Status: active
+
 ---
 
 ## 3 · Inherited from A1 (facts, not decisions to revisit)

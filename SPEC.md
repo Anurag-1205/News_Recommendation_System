@@ -1032,3 +1032,80 @@ command and the commit, so a claim in `RESULTS.md` can be regenerated from the r
   significant gain on every metric.
 - `bootstrap_ci`'s blocked draw reproduces A1's one-shot draw bit for bit (so no recorded CI
   moved), at 0.42 GB peak instead of ~4 GB at 244,647 impressions.
+
+---
+
+## 15 · A2 Phase 3.2–3.4 — One principled change: a freshness term in NRMS
+
+Owner: Aayush Pandey. Decision: CONTEXT.md C-028 (PLAN D4 = a candidate-freshness term).
+Outcome: C-029, `RESULTS.md` Q3.2–3.4.
+
+### 15.1 · The change
+
+NRMS scores a candidate as the dot product of a user vector and a news vector. The variant adds
+one term:
+
+```
+score(u, a, t) = user(u) · news(a)  +  g(x(a, t), unknown(a, t))
+g(x, unknown) = w2 · relu(W1 [x, unknown] + b1) + b2            (Dense(8, relu) → Dense(1))
+```
+
+Nothing else changes: the news encoder, the user encoder, the softmax-over-slate loss with
+npratio negatives, every hyper-parameter, seed, epoch count and data split are the baseline's
+(§13.1). The term is additive, so with `g ≡ 0` the variant is the baseline exactly — an identity
+that is tested.
+
+**Why this term (the principled part).** P3.1 measured NRMS 0.113 AUC below the reranker on
+EB-NeRD and 0.008 below on MIND (C-025). NRMS has no notion of article age; A1 found EB-NeRD
+"recency-dominated" (`age_hours` +0.125 permutation importance, every popularity feature near
+zero) and P2 found first-seen freshness a small, mixed signal on MIND. The brief names
+"freshness weighting" as an example change. Freshness is serving-safe: publish time (EB-NeRD)
+and first-seen time strictly before *t* (MIND) exist at serving time (Q9).
+
+### 15.2 · The feature: exactly the reranker's freshness
+
+`freshness_hours` is §11.8's `freshness_batch`, so both systems agree on what "fresh" means:
+
+| | first-known source | call |
+|---|---|---|
+| EB-NeRD | `articles.published_time` | as `src/rerank/ebnerd.add_phase1_features` |
+| MIND | `src/rerank/mind.first_sightings([train, dev])`, history articles stamped `DATASET_START` | as `src/rerank/mind.add_phase1_features`; strict `< t` keeps dev sightings out of train rows |
+
+Per candidate the model receives two numbers:
+
+```
+x       = (log1p(freshness_hours) − μ) / σ      μ, σ fitted on the TRAINING split's candidates, recorded in the manifest
+unknown = 1 if freshness_hours is NaN else 0;  x = 0 when unknown
+```
+
+`src/baselines/nrms_fresh_features.fresh_inputs(dataset, split, stats)` returns
+`(imp_row, cand_position, x, unknown)` for every candidate of a split; `as_lists` aligns them
+with `article_ids_inview` for the loaders. NaN is a value, not an error (§11.8: 0.002 % of
+EB-NeRD validation candidates, 0.09 % of MIND dev).
+
+### 15.3 · The ablation (Q3.3) and the claim (Q3.4)
+
+| row | trained | isolates |
+|---|---|---|
+| 1 · NRMS | C-025 runs, reused | the baseline |
+| 2 · NRMS + freshness | one run per dataset, same recipe and seeds | **the change**; the Q3.4 claim is row 2 − row 1, paired (§14) |
+| 3 · row 2's weights scored with the term masked (`x = 0, unknown = 1` for every candidate) | no | how much of row 2 flows through the term itself rather than through encoders that trained alongside it |
+
+Verdicts are the harness's (§14): "beats" only when the paired 95 % CI excludes zero. Anurag
+reviews every "beats" before it is recorded (C-019).
+
+**Pre-registered prediction (C-028, before any run):** EB-NeRD Δ AUC ≥ +0.03 with a CI
+excluding 0; MIND Δ AUC within ±0.01, CI possibly including 0. A null on MIND is reported as
+a null.
+
+### 15.4 · Verification
+
+- `tests/test_nrms_fresh.py`: hand-computed `x`/`unknown` on a toy split for a known μ, σ;
+  parity of raw `freshness_hours` with `src/rerank/ebnerd`'s column on the first 300 validation
+  impressions; **leakage** — appending a publish time or sighting at or after *t* changes no
+  input (Q9); list alignment with `article_ids_inview` position by position; the additive
+  identity (`g ≡ 0` ⇒ baseline scores) on a toy batch for both implementations; masked inputs
+  are all `(0, 1)`.
+- On Kaggle before the full runs: demo twin runs identical to every digit on both variants; the
+  additive-identity check printed in the log.
+- Every run in the ledger; `make paired` records for every Δ in `RESULTS.md`.
