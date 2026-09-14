@@ -22,9 +22,9 @@ _Last updated: 2026-09-14 13:00 by Aayush's agent (Claude Code)_
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
 | Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030): EB-NeRD +0.0074 AUC "beats" pending Anurag's review; MIND null. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
-| Team | Per C-019/C-027. Anurag: P5 joint (`make eval`, submission pipeline for `config.FINAL`), reviews Q3 "beats". Aayush: P4, P5 joint, P6 joint. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | **Please review** the EB-NeRD "beats" line: `RESULTS.md` Q3.2–3.4, records `data/processed/paired/ebnerd_row2_vs_row1.json` (regenerate with the `make paired` command there). Also still open from P0: `src/eval/scores.py` (P0.8 writer/validator — the harness has its own reader meanwhile), Kaggle datasets for the large files (5–6), and the reranker's `config.FINAL` scores file so reranker-vs-NRMS can be paired |
-| Aayush Pandey | **P4 done (C-031)**: `make bench DATASET=ebnerd|mind`, RESULTS.md Q4 complete. Next: P5 joint (with Anurag's `make eval`; the reranker-vs-NRMS pairing once his scores file exists), then P6 (note sections: Q3 with C-029/C-030's reasons, Q4's 10× argument) |
+| Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
+| Anurag Kaushal | **Owns P5 end to end (C-032)**: `config.FINAL` score files (P0.8), `make eval`, test-set inference on his quota, both submissions by **Wed 16 Sep**, screenshots. **Please review** the EB-NeRD "beats" line: `RESULTS.md` Q3.2–3.4, records `data/processed/paired/ebnerd_row2_vs_row1.json` (regenerate with the `make paired` command there). Also still open from P0: `src/eval/scores.py` (P0.8 writer/validator — the harness has its own reader meanwhile), Kaggle datasets for the large files (5–6), and the reranker's `config.FINAL` scores file so reranker-vs-NRMS can be paired |
+| Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
 | Blocked on | Anurag's review of the Q3 claim; `scores.py` and the reranker scores file for the reranker-vs-NRMS comparison |
 | Next up | **Aayush:** P4 plan. **Anurag:** review C-030; land P0.8; P5 `make eval` + first submission by Wed 16 Sep |
@@ -997,6 +997,32 @@ Entry format:
 - Affects: `src/serving/` (new), `scripts/bench.py`, `Makefile` (`bench`), `SPEC.md` §16,
   `RESULTS.md` Q4, `tests/test_serving.py`, `tests/test_cost.py`
 - Status: active
+
+### C-032 · P5 goes to Anurag end to end; Aayush's hand-over for it
+- Date / author: 2026-09-14 · agreed by Anurag Kaushal and Aayush Pandey; logged by Claude Code (Aayush's agent)
+- Decision: **P5 (Q5: `make eval`, the two slices, diversity/novelty/coverage, test-set inference,
+  both Codabench submissions and their screenshots) is Anurag's alone.** This revises C-019's
+  "joint" split. P6 stays joint. Aayush reviews Anurag's Q5 claims (the mirror of C-019).
+- Why: Anurag owns the reranker, the submission pipeline and the Codabench account (C-023); P5
+  is built on those. Aayush's phases (P3, P4) finished two days early, so the "joint so it does
+  not queue" rationale of C-019 no longer applies. Aayush stands by to take `make eval` if the
+  Wed 16 Sep first submission is at risk.
+- What Anurag needs from Aayush, and where it is:
+  - **On GitHub:** the Q3.4 judge (`make paired`, `src/eval/paired.py`, SPEC §14); the
+    scores-file reader/writer implementing the P0.8 contract (`write_scores`/`read_scores`,
+    SPEC §13.3) — `src/eval/scores.py` need not be written; the serving code (`src/serving/`)
+    if P5 wants per-request numbers; every RESULTS/CONTEXT entry.
+  - **Sent as a file (gitignored `data/`):** `aayush_p3_outputs_2026-09-14.tgz` (112 MB,
+    sha256 3fddbf3c…): NRMS score files for both datasets (`nrms`, `nrms_fresh`,
+    `nrms_fresh_masked`, with manifests), the four paired-bootstrap records behind RESULTS
+    Q3.2–3.4, and the refitted `config.FINAL` models. Extract at the repo root.
+  - **Not produced:** NRMS test-set scores. `config.FINAL` is what is submitted (C-023); an NRMS
+    leaderboard row would cost ≈ 2 h GPU per dataset and is not asked for.
+- What Aayush still owes P5: the reranker-vs-NRMS paired comparison once Anurag's `config.FINAL`
+  score files exist (one `make paired` per dataset; Aayush runs it or Anurag does); review of
+  Anurag's "beats" claims; the Q3/Q4 sections of the note (P6).
+- Affects: `PLAN.md` §2, §3 (P5 row), P5 heading; `CONTEXT.md` §1
+- Status: active (supersedes the P5 ownership line of C-019)
 
 ---
 

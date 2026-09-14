@@ -77,7 +77,7 @@ A1 best leaderboard results, as the reference point: **MIND AUC 0.5714**, **EB-N
 | **P2** Two-stage reranker (Q2) | Anurag Kaushal | **locked** (C-018): `src/rerank/config.FINAL`. Open: D1 framing (b), retrieving a top-K from the corpus as Q2.1 asks |
 | **P3** Baseline + improvement (Q3): P3.1, P3.4a, P3.2–3.4 | **Aayush Pandey** | NRMS reproduction on Kaggle (2× T4, fp16) on both datasets; the paired bootstrap CI harness; the one principled change and its ablation |
 | **P4** Serving & scale (Q4) | Aayush Pandey | index memory, p99 latency, SLA cost model, 10× breakdown |
-| **P5** Extended eval + Codabench (Q5) | **Anurag Kaushal & Aayush Pandey** | diversity/novelty/coverage, cold/warm and head/tail slices, full test-set submission runs on Kaggle, screenshots |
+| **P5** Extended eval + Codabench (Q5) | **Anurag Kaushal** (C-032, was joint) | diversity/novelty/coverage, cold/warm and head/tail slices, full test-set submission runs on Kaggle, screenshots; Aayush reviews the claims and runs the reranker-vs-NRMS pairing |
 | **P6** Design note + ship (Q6–Q9) | Anurag Kaushal & Aayush Pandey | report, checklist, final push |
 
 **The shape of the split (revised).**
@@ -85,8 +85,8 @@ A1 best leaderboard results, as the reference point: **MIND AUC 0.5714**, **EB-N
 - **Anurag** built the behavioural features and the reranker (P1 and P2, both done).
 - **Aayush** owns the whole Q3 track: reproducing NRMS, the principled change, its ablation, and
   the paired-bootstrap harness that judges it. He also owns serving (P4).
-- **Evaluation and submissions (P5) are shared,** so the full-scale Kaggle runs do not queue
-  behind P3 and P4.
+- **Evaluation and submissions (P5) are Anurag's** (C-032; P3 and P4 finished early, so the
+  reason for sharing them lapsed). Aayush reviews P5's claims and pairs reranker vs NRMS.
 
 **Independent check on Q3 claims.** The original split kept the builder and the judge of a model
 apart (`CLAUDE.md` rule 2). With all of P3 on one person that is lost for Q3, so **Anurag reviews
@@ -127,7 +127,7 @@ new work.
 | **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☑ done 14 Sep (C-026): adopted + moved; `make paired` |
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☑ done 14 Sep (C-030): EB-NeRD +0.0074 AUC, CI > 0 (review pending); MIND null |
 | **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☑ done 14 Sep (C-031): (a) p99 1.7/3.4 ms, (b) 72/87 ms, BM25 breaks first at 10× |
-| **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag & Aayush** | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
+| **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag** (C-032) | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
 | **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ☐ |
 
 P4 starts early on A1 outputs (§2). P5 can start at once: the reranker is locked in `config.FINAL`.
@@ -251,7 +251,7 @@ Anurag reviews every "beats" claim before it is recorded (C-019).
 
 ---
 
-## Phase 5 — Extended eval + submissions (Q5) · **13–18 Sep · Anurag & Aayush**
+## Phase 5 — Extended eval + submissions (Q5) · **13–18 Sep · Anurag** (C-032; hand-over from Aayush in C-032)
 
 1. `make eval`: all metrics (AUC, MRR, nDCG@5, nDCG@10, diversity, novelty, coverage) for the full
    two-stage pipeline, with bootstrap CIs.
