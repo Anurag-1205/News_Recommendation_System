@@ -16,18 +16,18 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-14 13:00 by Aayush's agent (Claude Code)_
+_Last updated: 2026-09-14 by Anurag (agent: Claude Code)_
 
 | | |
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
-| Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030): EB-NeRD +0.0074 AUC "beats" pending Anurag's review; MIND null. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
+| Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | **Owns P5 end to end (C-032)**: `config.FINAL` score files (P0.8), `make eval`, test-set inference on his quota, both submissions by **Wed 16 Sep**, screenshots. **Please review** the EB-NeRD "beats" line: `RESULTS.md` Q3.2–3.4, records `data/processed/paired/ebnerd_row2_vs_row1.json` (regenerate with the `make paired` command there). Also still open from P0: `src/eval/scores.py` (P0.8 writer/validator — the harness has its own reader meanwhile), Kaggle datasets for the large files (5–6), and the reranker's `config.FINAL` scores file so reranker-vs-NRMS can be paired |
+| Anurag Kaushal | **C-019 review of the EB-NeRD "beats" line is DONE and signed off (C-033)**: all four checks passed — reproduction bit-identical (Δ AUC +0.0074 [+0.0066, +0.0081]), full-split coverage with no truncation, labels independently reconstructed on all 2,928,942 rows, and the row-3 masked control reproduced. `RESULTS.md` Q3.2–3.4 now carries the reviewer line; my record is `data/processed/paired/ebnerd_row2_vs_row1_review_anurag.json` (Aayush's file untouched). Next: **P5 end to end (C-032)** — `config.FINAL` score files, `make eval`, test-set inference, both submissions, screenshots. Also open from P0: Kaggle datasets for the large files (5–6) |
 | Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
-| Blocked on | Anurag's review of the Q3 claim; `scores.py` and the reranker scores file for the reranker-vs-NRMS comparison |
-| Next up | **Aayush:** P4 plan. **Anurag:** review C-030; land P0.8; P5 `make eval` + first submission by Wed 16 Sep |
+| Blocked on | Nothing on Aayush's side for Q3: the claim is signed off (C-033). He still needs the reranker's `config.FINAL` scores file before the reranker-vs-NRMS pairing can run — that is Anurag's next step |
+| Next up | **Anurag:** the `config.FINAL` scores files, then `make eval`, then test-set inference + submissions. **Aayush:** P6 — the Q3 and Q4 sections of the note, now that Q3 is verified |
 
 ---
 
@@ -1033,7 +1033,31 @@ Entry format:
 - Affects: `PLAN.md` §2, §3 (P5 row), P5 heading; `CONTEXT.md` §1
 - Status: active (supersedes the P5 ownership line of C-019)
 
----
+### C-033 · C-019 review: the EB-NeRD freshness "beats" line is verified; Aayush is unblocked
+- Date / author: 2026-09-15 · Anurag Kaushal (Claude Code)
+- Decision: the Q3.2–3.4 EB-NeRD claim — NRMS + freshness beats NRMS, Δ AUC +0.0074
+  [+0.0066, +0.0081] and positive on all four metrics — **passes review and is now a result**.
+  `RESULTS.md` Q3.2–3.4 carries the reviewer line. **Aayush is unblocked for the note.**
+- What was checked (all passed):
+  - **Reproduction.** The command stored in the record, rerun through `make paired`, reproduced it
+    **bit-identically** — every value in `system_a`, `system_b` and `delta_b_minus_a`, both
+    manifests, same 1,000 resamples and seed 0. My record was written to
+    `data/processed/paired/ebnerd_row2_vs_row1_review_anurag.json` so his artifact stayed untouched.
+  - **No truncation, full overlap.** 2,928,942 rows over 244,647 impressions in both files, equal to
+    the split's own slate-length sum and impression count; identical `(imp_row, cand_position)` key
+    sets; per-impression counts equal the slate lengths.
+  - **Label mechanics.** No score file carries a label column. `split_labels` was cross-checked
+    against an independent path (`src.rerank.ebnerd.candidate_frame`, labels by clicked-id
+    membership): identical on all 2,928,942 rows, 245,622 positives each.
+  - **Masked control.** `nrms_fresh_masked` − `nrms_fresh` reproduced bit-identically at
+    −0.0174 AUC [−0.0180, −0.0169].
+- Data fact found while checking, worth keeping: the split lists 246,289 clicked ids but only
+  245,622 distinct (impression, article) positives. The difference is exactly **667 duplicate
+  clicked ids inside impressions**, deduped identically by both label paths. Every clicked id is
+  present in its own slate, so no impression has an unrankable click and none is dropped by the
+  bootstrap.
+- Affects: `RESULTS.md` Q3.2–3.4, `CONTEXT.md` §1
+- Status: active
 
 ## 3 · Inherited from A1 (facts, not decisions to revisit)
 

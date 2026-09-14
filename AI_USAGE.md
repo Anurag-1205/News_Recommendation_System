@@ -748,3 +748,38 @@ human-written code. Both team members append here. Chat exports are submitted wi
     kept) → 1.7 ms. Reported as the "naive" row rather than hidden.
   - `_profile_masses` ran on MIND (string user ids vs an Int64 empty-log schema); guarded by
     feature need.
+
+### 2026-09-15 · Anurag Kaushal · Claude Code (Opus 5) · Install Aayush's P3 archive; reproduce the EB-NeRD "beats" claim (C-019 review, step 1)
+- Asked: "We are picking up Aayush's hand-over to execute the C-019 review and unblock the note.
+  Extract Archive: … extract the aayush_p3_outputs_2026-09-14.tgz archive located in
+  /home/anurag/Documents/IRE into the current working directory, following Aayush's documented
+  hand-over instructions. Execute Review: Read data/processed/paired/ebnerd_row2_vs_row1.json and
+  extract the make paired command from it. Run that exact command in the terminal to independently
+  verify the +0.0074 AUC 'beats' claim on EB-NeRD. Halt and Document: Report the output … Do not
+  proceed to make eval or update any RESULTS.md numbers yet. Update CONTEXT.md … and append an
+  entry in AI_USAGE.md under Anurag."
+- Produced (no source code changed): archive extracted into the repo; `CONTEXT.md` §1 updated
+  (archive installed, review reproduction done, verdict still pending); this entry. My verification
+  record is `data/processed/paired/ebnerd_row2_vs_row1_review_anurag.json` (gitignored, under
+  `data/`).
+- Verified by:
+  1. **Archive integrity before extracting.** sha256
+     `4c1b11e9320ca036d14dbdd5e6221de063fc7061d961add28a2e8252286f6ab3` matches the hand-over
+     message. `tar tzf` first: 27 entries, every one under `data/`, no absolute or `../` paths.
+  2. **Aayush's own post-install check** returns what he documented: `read_scores` on
+     `data/scores/mind/MINDsmall_dev/nrms.parquet` gives `2740998 nrms`.
+  3. **Independent re-run of the recorded command** (`make paired`, which expands to exactly the
+     `scripts/paired_compare.py` invocation stored in the record; defaults 1000 iterations, seed 0
+     as recorded): 92 s, Δ AUC **+0.0074 [+0.0066, +0.0081]**, MRR +0.0094, nDCG@5 +0.0121,
+     nDCG@10 +0.0092, all four verdicts "nrms_fresh beats nrms".
+  4. **Full-precision diff of the two records:** every value in `system_a`, `system_b` and
+     `delta_b_minus_a` is **bit-identical**, both manifests identical, same counts
+     (244,647 common impressions), same iterations and seed.
+- Judgement call, flagged: I wrote my run to a **separate** JSON instead of the path in the record.
+  Re-running with `JSON=…ebnerd_row2_vs_row1.json` would have overwritten the very artifact under
+  review (and its `repo_commit` / `written_at`). The two files are compared instead.
+- Noted, not yet acted on: the records were written at repo commit `b76d764`, mine at the current
+  `3e56674`; the numbers are unchanged across that range. **The review is not signed off** — the
+  reproduction step is done, the remaining integrity checks (label join, framing, no truncation,
+  the masked row-3 control) are not, and no `RESULTS.md` number was touched, as instructed.
+- Failed / corrected: nothing failed in this step.

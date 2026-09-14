@@ -509,9 +509,25 @@ Judgement: `make paired A=… B=… JSON=data/processed/paired/<dataset>_<rows>.
 
 **Verdicts (SPEC §14 wording; "beats" only when the paired CI excludes 0).**
 
-- **EB-NeRD: the harness returns "NRMS + freshness beats NRMS" on all four metrics.** Per C-019 this
-  is **recorded as pending Anurag Kaushal's review** of the paired CI and the commands above; it becomes a
-  result when he signs it off.
+- **EB-NeRD: the harness returns "NRMS + freshness beats NRMS" on all four metrics.**
+  **Reviewed and verified by Anurag Kaushal, 2026-09-15 (C-019, C-033).** The review reran the
+  recorded commands and checked the claim's mechanics; all four checks passed:
+  - **Reproduction.** `make paired` on the two score files reproduced the record **bit-identically**
+    (every value in `system_a`, `system_b`, `delta_b_minus_a`; both manifests; same seed 0 and 1,000
+    resamples): Δ AUC +0.0074 [+0.0066, +0.0081]. Records: `ebnerd_row2_vs_row1_review_anurag.json`.
+  - **No truncation, full overlap.** Both files carry 2,928,942 rows over 244,647 impressions, which
+    equals the validation split exactly (its slate lengths sum to 2,928,942); the two files'
+    `(imp_row, cand_position)` key sets are identical, and per-impression counts equal the slate
+    lengths.
+  - **Labels come from the split, not the files.** No score file has a label column. `split_labels`
+    was cross-checked against an independent reconstruction (`src.rerank.ebnerd.candidate_frame`,
+    which builds labels by clicked-id membership): **identical on all 2,928,942 rows**, 245,622
+    positives each. The gap to the split's 246,289 clicked ids is exactly the 667 duplicate clicked
+    ids inside impressions, deduped identically by both paths; every clicked id is present in its
+    slate, so no impression has an unrankable click.
+  - **Masked control.** `nrms_fresh_masked` − `nrms_fresh` reproduced bit-identically at
+    −0.0174 AUC [−0.0180, −0.0169]; record `ebnerd_row3_vs_row2_review_anurag.json`.
+  The claim stands as a result.
 - **MIND: no significant difference on any metric** — a null, as pre-registered.
 
 **Prediction vs outcome.** MIND: as predicted (within ±0.01; null). EB-NeRD: the sign and the
