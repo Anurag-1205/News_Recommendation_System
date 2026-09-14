@@ -1012,10 +1012,19 @@ Entry format:
     scores-file reader/writer implementing the P0.8 contract (`write_scores`/`read_scores`,
     SPEC §13.3) — `src/eval/scores.py` need not be written; the serving code (`src/serving/`)
     if P5 wants per-request numbers; every RESULTS/CONTEXT entry.
-  - **Sent as a file (gitignored `data/`):** `aayush_p3_outputs_2026-09-14.tgz` (112 MB,
-    sha256 3fddbf3c…): NRMS score files for both datasets (`nrms`, `nrms_fresh`,
-    `nrms_fresh_masked`, with manifests), the four paired-bootstrap records behind RESULTS
-    Q3.2–3.4, and the refitted `config.FINAL` models. Extract at the repo root.
+  - **Sent by Aayush as a file** (its contents live under gitignored `data/`, Q8):
+    `aayush_p3_outputs_2026-09-14.tgz`, 112 MB, **sha256 `4c1b11e9320ca036d14dbdd5e6221de063fc7061d961add28a2e8252286f6ab3`**. It holds the NRMS score
+    files for both datasets (`nrms`, `nrms_fresh`, `nrms_fresh_masked`, with manifests, SPEC
+    §13.3), the paired-bootstrap records behind RESULTS Q3.2–3.4, the refitted `config.FINAL`
+    models, and `data/share/README_handover.md` with the same instructions as here.
+    **Install:** from the repo root on `a2-click-logs`, `sha256sum` the file and compare, then
+    `tar xzf aayush_p3_outputs_2026-09-14.tgz -C .` — it creates `data/scores/ebnerd/validation/`,
+    `data/scores/mind/MINDsmall_dev/`, `data/processed/paired/`, `data/processed/models/`.
+    **Verify:** `PYTHONPATH=. .venv/bin/python -c "from src.eval.paired import read_scores; f,m=read_scores('data/scores/mind/MINDsmall_dev/nrms.parquet'); print(f.height, m['system'])"`
+    → `2740998 nrms`. **Use:** `read_scores` + `split_labels` for `make eval` rows; write
+    `config.FINAL`'s scores with `write_scores` (or `src/baselines/nrms_data.scores_frame` +
+    `write_scores`) and run `make paired A=…/nrms.parquet B=…/reranker_final.parquet JSON=…`
+    per dataset; labels are never in the files (join from the split by `imp_row`, `cand_position`).
   - **Not produced:** NRMS test-set scores. `config.FINAL` is what is submitted (C-023); an NRMS
     leaderboard row would cost ≈ 2 h GPU per dataset and is not asked for.
 - What Aayush still owes P5: the reranker-vs-NRMS paired comparison once Anurag's `config.FINAL`
