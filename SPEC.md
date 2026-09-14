@@ -1109,3 +1109,62 @@ a null.
 - On Kaggle before the full runs: demo twin runs identical to every digit on both variants; the
   additive-identity check printed in the log.
 - Every run in the ledger; `make paired` records for every Δ in `RESULTS.md`.
+
+---
+
+## 16 · A2 Phase 4 — Serving & scale (Q4): `make bench`
+
+Owner: Aayush Pandey. Decisions: CONTEXT.md C-031. Numbers: `RESULTS.md` Q4. Code:
+`src/serving/`, `scripts/bench.py`, `make bench DATASET=ebnerd|mind`.
+
+### 16.1 · What is served, and what a request is
+
+The system is the locked two-stage reranker (`src/rerank/config.FINAL`, C-018) on A1's stage 1.
+**One request** = one (user, time *t*) pair and produces a scored list of candidates:
+
+| stage | framing (b) "retrieve then rerank" — Q4.2's wording | framing (a) "rerank the impression" — what ships |
+|---|---|---|
+| 1 · candidates | `BM25.search(k)` over the user's last-5-click query ∪ `ANNIndex.search(k)` over the mean-pooled user vector, K ∈ {100, 200}; union in BM25-then-ANN order | the impression's own inview list (≈ 12 on EB-NeRD, ≈ 37 on MIND) |
+| 2 · features | `config.FINAL`'s feature list, each from the **same function the batch path uses**: BM25 / cosine scores of the candidates, `RollingCounts.clicks_before / ctr_before` at *t*, freshness from the article's first-known time (strict `< t`), `n_candidates`, `history_len`, the row-by-row `recency_weighted_profile` and `category_match` on the user's click log (h = ∞), `cand_position` = 1-based slot in the list, `session_pos` from the session store | same |
+| 3 · scoring | `predict_scores(config.FINAL model, X)` — LightGBM lambdarank (EB-NeRD) / HistGBDT (MIND) | same |
+
+The **serving state** (`src/serving/state.ServingState`) holds: article meta (tokens, category,
+publish or first-seen time); the inverted index + BM25; the flat FAISS index; `RollingCounts`
+sealed over the training split (the popularity feature store); per-user last-5 clicked ids;
+per-user click log with categories (the profile store); a session store giving the pre-*t*
+session position. Everything is built from `data/interim` + `data/processed` by the same loaders
+P2 uses (`scripts/rerank_*_a2.Stage1`, `src/rerank/*.load_*`).
+
+### 16.2 · Measurements
+
+- **Memory** (Q4.1): per component, bytes on disk (the files it loads) and bytes in RAM (RSS
+  delta while building it; FAISS flat = `ntotal × d × 4`); peak RSS of the serving process.
+- **Latency** (Q4.2): 1,000 validation impressions sampled with seed 0, in file order of the
+  sample; 100 warm-up requests excluded; per stage (`retrieve`, `features`, `score`) and total,
+  p50 / p95 / p99 and mean; for (a), (b) K = 100, (b) K = 200. **One core**: `taskset -c 0`,
+  LightGBM `n_jobs=1`, FAISS/OpenMP/BLAS threads = 1, nothing else running. Hardware recorded.
+  Throughput on one core = 1 / mean total. Also: the same 1,000 impressions through the P2
+  batch path, so the per-request overhead of this implementation is visible.
+- **Cost** (Q4.3): `src/serving/cost.py`: cores = ⌈QPS × mean service time / ρ⌉ with ρ = 0.5
+  (at ρ = 0.5 an M/M/1 server's mean wait equals one service time, so p99 stays close to the
+  measured single-request p99; this is an assumption, stated); the SLA holds if measured
+  p99 < 100 ms; cost per 1,000 queries = cores × price / (QPS × 3.6), price = one cited
+  on-demand vCPU-hour (URL and date in RESULTS). Target QPS is a stated parameter (100 and 1,000).
+- **10×** (Q4.4): argued in RUM terms from the measured stage shares — reads per request
+  (postings scanned, `ntotal × d` distance multiplies for flat ANN, feature-store lookups),
+  updates per event (count-list and history appends), memory per component — for 10× users,
+  10× articles and 10× QPS separately; which resource fails first is read off the numbers.
+
+### 16.3 · Verification
+
+- `tests/test_serving.py`: (i) **parity** — on 200 seeded validation impressions in framing (a)
+  the per-request feature rows equal the batch rows from `scripts.rerank_*_a2.build` to 1e-9 per
+  feature, and the scores equal batch `predict_scores`: the train/serve-skew check A1's
+  submission 3 lacked; (ii) framing (b)'s set equals `BM25.search ∪ ANNIndex.search` with ≤ 2K
+  ids; (iii) **no future leak**: moving *t* earlier than an event removes it from every count and
+  from the session position; (iv) the memory report names every component with bytes > 0.
+- `tests/test_cost.py`: the cost formula on a hand-computed example.
+- The fitted `config.FINAL` model used for serving reproduces `RESULTS.md` Q2's AUC on the same
+  100k evaluation sample (EB-NeRD 0.6728, MIND 0.6747) — printed by `make bench` and asserted.
+- Every number in `RESULTS.md` Q4 is copied from `data/processed/bench_<dataset>.json`, which
+  records hardware, commit, command and seed.

@@ -44,8 +44,9 @@ paired: env  ## paired bootstrap of two scores files: make paired A=a.parquet B=
 eval:  ## full two-stage metrics, slices, bootstrap CIs (A2 Q5)
 	@echo "make eval: not implemented (A2 P5)"; exit 1
 
-bench:  ## index memory, p99 latency, cost/QPS (A2 Q4)
-	@echo "make bench: not implemented (A2 P4)"; exit 1
+bench: env  ## Q4 serving benchmark on ONE core: make bench DATASET=ebnerd|mind (memory, p50/p95/p99, cost)
+	@test -n "$(DATASET)" || (echo "usage: make bench DATASET=ebnerd|mind"; exit 2)
+	PYTHONPATH=. taskset -c 0 $(PY) scripts/bench.py --dataset $(DATASET) $(BENCH_ARGS)
 
 clean-pyc:
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +
