@@ -469,6 +469,73 @@ is unchanged.
 **Pending, not run:** reranker `config.FINAL` vs NRMS on both datasets — needs Anurag's scores
 file for the reranker (P0.8). The command above is the one that will produce it.
 
+### Q3.2–3.4 · One principled change: a freshness term in NRMS — 2026-09-14, Aayush Pandey (SPEC.md §15, C-028–C-030)
+
+**The change** (C-028): `score = user · news + g(x, unknown)`, `g` = Dense(8, relu) → Dense(1) on the
+standardised log-age of the candidate at impression time (§15.2, the reranker's own `freshness_hours`,
+strictly before *t*). Everything else — encoders, recipe, seeds, epochs, data, sampling — is the
+baseline's. Pre-flight, in the ledger: the model-level oracles (g ≡ 0 ⇒ baseline scores, per-candidate
+locality, loader/iterator shapes and mask) passed on Kaggle before training; demo twins identical to
+every digit on both datasets. Training-split stats: EB-NeRD μ = 2.632, σ = 2.655; MIND μ = 2.915, σ = 0.861.
+
+**Pre-registered prediction (C-028, before any run):** EB-NeRD Δ AUC ≥ +0.03 with a CI excluding 0;
+MIND Δ AUC within ±0.01, CI possibly including 0. **Pre-run diagnostic (C-029, before any run):**
+freshness alone ranks within-slate clicks at AUC 0.501 on EB-NeRD and 0.519 on MIND
+(`scripts/check_fresh_signal.py`), so the EB-NeRD prediction was expected to fail on magnitude.
+
+**Runs.** EB-NeRD: ledger `a2-nrms-ebnerd-fresh` v5 (main account, repo `3b94316`, xlm-roberta-large
+kept at 0.323 s/step, 5 epochs, 8,101 s train, two full-slate scoring passes, 3 h 54 min, 3.9 h quota).
+MIND: ledger `a2-nrms-mind-fresh` v6 (alt account, 5 epochs, 7,545 s train, 2 h 12 min, 2.2 h quota).
+Judgement: `make paired A=… B=… JSON=data/processed/paired/<dataset>_<rows>.json` (SPEC §14; records in
+`data/processed/paired/`), all impressions of each evaluation split, 1,000 resamples, seed 0.
+
+**The ablation (§15.3).**
+
+| EB-NeRD, 244,647 validation impressions | AUC | MRR | nDCG@5 | nDCG@10 |
+|---|---|---|---|---|
+| 1 · NRMS (Q3.1) | 0.5600 [0.5588, 0.5612] | 0.3491 | 0.3884 | 0.4668 |
+| 2 · NRMS + freshness | **0.5674** [0.5661, 0.5686] | 0.3585 | 0.4005 | 0.4759 |
+| 3 · row 2 scored with the term masked | 0.5500 [0.5488, 0.5512] | 0.3427 | 0.3815 | 0.4602 |
+| **Δ row 2 − row 1, paired** | **+0.0074 [+0.0066, +0.0081]** | **+0.0094 [+0.0085, +0.0101]** | **+0.0121 [+0.0112, +0.0129]** | **+0.0092 [+0.0085, +0.0098]** |
+| Δ row 3 − row 2, paired | −0.0174 [−0.0180, −0.0169] | −0.0157 [−0.0164, −0.0151] | −0.0190 [−0.0196, −0.0183] | −0.0157 [−0.0163, −0.0152] |
+
+| MIND, 73,152 dev impressions | AUC | MRR | nDCG@5 | nDCG@10 |
+|---|---|---|---|---|
+| 1 · NRMS (Q3.1) | 0.6667 [0.6647, 0.6688] | 0.3220 | 0.3557 | 0.4184 |
+| 2 · NRMS + freshness | 0.6661 [0.6641, 0.6681] | 0.3227 | 0.3565 | 0.4182 |
+| 3 · row 2 scored with the term masked | 0.6661 [0.6641, 0.6682] | 0.3226 | 0.3566 | 0.4183 |
+| Δ row 2 − row 1, paired | −0.0006 [−0.0014, +0.0002] | +0.0007 [−0.0001, +0.0015] | +0.0008 [−0.0001, +0.0018] | −0.0002 [−0.0010, +0.0005] |
+| Δ row 3 − row 2, paired | +0.0000 [−0.0002, +0.0002] | −0.0001 [−0.0002, +0.0001] | +0.0001 [−0.0001, +0.0002] | +0.0001 [−0.0001, +0.0003] |
+
+**Verdicts (SPEC §14 wording; "beats" only when the paired CI excludes 0).**
+
+- **EB-NeRD: the harness returns "NRMS + freshness beats NRMS" on all four metrics.** Per C-019 this
+  is **recorded as pending Anurag Kaushal's review** of the paired CI and the commands above; it becomes a
+  result when he signs it off.
+- **MIND: no significant difference on any metric** — a null, as pre-registered.
+
+**Prediction vs outcome.** MIND: as predicted (within ±0.01; null). EB-NeRD: the sign and the
+significance were as predicted, the **magnitude was not** — +0.007, a quarter of the pre-registered
++0.03. C-029 explains why: A1's +0.125 importance was pooled (across impressions), and the within-slate
+signal an additive term can use is small. The term still buys 0.007 because `g` is non-monotone —
+C-029's fresher-first/older-first check bounds only monotone signal — but the gap to the reranker
+(0.673) barely moves: **0.113 → 0.106**.
+
+**What row 3 means, and does not mean.** Masking the term at inference is a *dependence* check, not a
+removal: on EB-NeRD the encoders co-adapted to the term (−0.017 without it, below the baseline itself),
+on MIND they learned to ignore it (Δ 0.000 ± 0.0002). The clean "component removed" row is row 1, which
+was trained without the term.
+
+**Sampled vs full slates.** On the sampled 5-candidate holdout the variant's `val_auc` was 0.7149 vs the
+baseline's 0.6393 (+0.076); on the full validation slates the gain is +0.007. Sampled-slate validation
+overstated the change by an order of magnitude — the reason §13.2 evaluates on full slates.
+
+**Serving-time honesty (Q9).** The term uses publish time (EB-NeRD) / first-seen time strictly before *t*
+(MIND); both exist at serving time. No serving-unavailable feature is involved.
+
+**Cost.** GPU: EB-NeRD 3.9 h (main), MIND 2.2 h (alt), pre-flight checks ≈ 1.3 h across both; totals
+this week: main 12.2 h of 30, alt 2.5 h of 30. Laptop: each `make paired` on EB-NeRD 46 s at 1.4 GB peak.
+
 
 _Not started._
 

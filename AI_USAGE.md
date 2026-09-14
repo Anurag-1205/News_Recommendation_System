@@ -693,3 +693,35 @@ human-written code. Both team members append here. Chat exports are submitted wi
     array. Fixed by blocked draws; a test proves bit identity with the old draw so no recorded
     CI changed. Two background shell tasks from the crashed session were orphaned; nothing was
     lost (the first comparison's record was already on disk).
+
+### 2026-09-14 (01:45–06:50, unattended) · Aayush Pandey · Claude Code (Opus 5) · P3.2–3.4: freshness term in NRMS, both datasets, ablation and paired CIs
+- Asked: "yes" (open the P3.2 plan; D4 = option A chosen by Aayush), then "run in kaggle … I am
+  going to sleep … your responsibility that you run the full run of both … for both ablations",
+  and separately the GitHub credential-store setup so the agent could push.
+- Produced (AI-generated; to be reviewed by Aayush): `src/baselines/nrms_fresh_features.py`,
+  `nrms_fresh_ebrec.py`, `nrms_fresh_rec.py`; `tests/test_nrms_fresh*.py` (6 laptop oracles + 6
+  TF oracles that run inside the kernels); `scripts/kaggle/nrms_ebnerd_fresh/`,
+  `nrms_mind_fresh/`, `overlay.py` (used once, then cleared), `check_fresh_signal.py`;
+  SPEC §15; C-028 (decision + pre-registered prediction), C-029 (pre-run diagnostic), C-030
+  (outcome); RESULTS.md Q3.2–3.4; PLAN status; ledger rows for 12 runs.
+- Verified by: kernel-side oracles (3 + 3 passed on Kaggle before training); demo twins identical
+  to every digit on both variants; our metrics = reference evaluators; score files joined to the
+  splits' labels; `make paired` records for every Δ. `make test` 354 passed, 2 skipped.
+- Failed / corrected (each cost one ~2–15 min Kaggle run, all in the ledger):
+  - `set -o pipefail` in `subprocess.run(shell=True)` — /bin/sh is dash.
+  - wu2019 sampling gives k rows per impression for k clicks; `as_lists` keyed on `imp_row`
+    merged them. Row-keyed now, with a test.
+  - MIND oracle skipped (exit 5): recommenders not on the subprocess path.
+  - TF1: two recommenders models cannot share weights (one session each); a `Sequential` used
+    only via `TimeDistributed` has no standalone input for `predict`. Identity test rewritten
+    against numpy softmax(user·news) from the model's own encoders; `g` is a functional Model.
+  - float32 `0.30000001 != 0.3` in a test.
+  - The agent's twin-comparison script flagged the RESULT line (wall-clock seconds) as a
+    difference; read past it.
+  - Before credentials existed, one demo run used an overlay of the unpushed fix (recorded
+    in its log and ledger row; identical numbers to the clean-clone twin).
+- Scientific corrections made by the agent during the night, before the outcome: C-029 — the
+  A1 evidence behind D4 was pooled importance; freshness alone has ~no within-slate signal on
+  EB-NeRD. Logged before the full runs so the prediction's failure on magnitude is not hindsight.
+- Departure from CLAUDE.md §3: the agent committed and pushed throughout, on Aayush's standing
+  instruction (memory + this log). Never force-pushed.

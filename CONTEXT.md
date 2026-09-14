@@ -16,18 +16,18 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-14 by Aayush (agent: Claude Code)_
+_Last updated: 2026-09-14 06:50 by Aayush's agent (Claude Code), end of an unattended overnight run_
 
 | | |
 |---|---|
-| Branch | `a2-click-logs`, from `main` at `be15ee6` (A1 final). **Origin is at `f44b108` = local HEAD** (checked with `git ls-remote` on 12 Sep), so the 11 Sep "not on GitHub" block is cleared |
-| Phase | **P1 done** (C-014). **P2 locked** (C-018) in `src/rerank/config.FINAL`: EB-NeRD lambdarank without dwell, AUC 0.6728; MIND pointwise A1 v4, AUC 0.6747. Open for Q2: D1 framing (b). **P0 clean-clone check passed on Aayush's machine: 318 passed** (`RESULTS.md`, verification table). See `PLAN.md` §3 |
-| Team | Per **C-019**. **Anurag Kaushal**: P1 and P2 (done), P5 joint, P6 joint. **Aayush Pandey**: all of P3 (NRMS on Kaggle, paired bootstrap, the change and its ablation), P4, P5 joint, P6 joint. Anurag reviews every Q3 "beats" claim |
-| Anurag Kaushal | Next: P5 (joint), proposed as `make eval` plus the Kaggle submission pipeline for `config.FINAL`; D1 framing (b); reviewing Aayush's Q3 claims |
-| Aayush Pandey | **P0 in progress.** Done: pull, `.venv` from the pinned `requirements.txt`, suite green (318). `make` and `python3.12-venv` installed afterwards and `make test` re-run green (the venv itself was built with `uv venv --seed` + the venv's own `pip`, same interpreter and pins as `make env`). **Kaggle verified** (C-020): CLI as `aayushpandey18602`, 2× T4 + fp16 PASS, 30 h/week quota. **NRMS smoke test PASSED on Kaggle** (C-021, C-022; `RESULTS.md` P0): `external/ebnerd-benchmark` at `5164e2c`, TF/Keras, float32, 273 s/epoch on demo. **Local data complete (13 Sep):** `make fetch-small`, `make fetch-mind` (HF login as `aayush18602`), and the new `make fetch-testset` (1.63 GB, ~2 h on the campus link) all done; `make data` builds both datasets (MIND 95,071/31,624/30,270; EB-NeRD 192,884/32,225/7,778 train/val/test rows) and is idempotent on re-run. `data/` is 6 GB (raw 2.3, interim 3.6). **C-013's two corrections reviewed and agreed by Aayush (12 Sep)**: `session_len` unsafe; `n_prior_clicks_in_session` omitted (not zero-filled) for the submission model. Then **all of P3** (C-019): NRMS smoke test on EB-NeRD demo → both datasets (P3.1); paired bootstrap (P3.4a, replace or adopt `common.paired_delta`); the change and its ablation (P3.2–3.4). Plus P4 |
-| Compute | Kaggle 2× T4 for GPU and full-scale runs; laptop for dev/tests (C-004). Verified accounts: Anurag's (P5), Aayush main `aayushpandey18602` (22.3 h left) and Aayush alt `aayushpandey602` (30 h) — C-027. Aayush's laptop: Python 3.12.3, 15 GB RAM, no GPU, 36 GB free disk |
-| Blocked on | team decisions D1–D9 in `PLAN.md` §5. **Scores-file format agreed 13 Sep** (Aayush proposed, Anurag amended: key `imp_row`, native `article_id`, 1-based `cand_position`, Float64 `score`, manifest with `framing`); Anurag lands it as `src/eval/scores.py` + SPEC entry + the C-NNN decision, with a round-trip acceptance test against RESULTS.md Q2 (0.6728 / 0.6747). Aayush reviews, then builds P3.4a on it |
-| Next up | **Aayush, P3.1 DONE 14 Sep 00:40 (C-025):** NRMS reproduced on both datasets, score files verified locally, RESULTS.md Q3.1 written with the published comparison and gap. **P3.4a DONE 14 Sep (C-026):** `make paired A=… B=…` is the Q3 judge, calibrated and validated on the real file; `bootstrap_ci` OOM fix. Next: **P3.2 plan** (D4: recency/freshness-aware NRMS, evidence in C-025); reranker-vs-NRMS runs when Anurag's `config.FINAL` scores file lands. Earlier in the evening: U1 (SPEC §13, C-024) and U2 (`src/baselines/nrms_data`, 9 oracles) committed at `5a6bb76`. **MIND-native go/no-go resolved: GO** — `scripts/kaggle/nrms_mind_smoke` v3 trained one epoch of the recommenders NRMS on MINDsmall_train under tf-keras (1,041 s train, dev group_auc 0.6489 after 1 epoch, alignment oracle held on all 73,152 dev impressions; log `data/logs/kaggle/nrms_mind_smoke_v3.log`). No fallback. Kernels `nrms_ebnerd` and `nrms_mind` are in their DEMO_CHECK determinism runs; full runs follow (EB-NeRD ≈ 3.5 h incl. ~65 min of full-slate scoring measured at 15.6 ms/impression; MIND ≈ 2 h). Remaining P0 split 13 Sep: **step 4 done (C-023: no team feature, submit from Anurag's account)**; **Anurag → steps 5–6** (large files as Kaggle datasets, hash-verified; MINDlarge_train/dev deferred to D5) **and step 8** (`src/eval/scores.py`). Next: P3.4a paired bootstrap locally; P3.1 NRMS on `ebnerd_small` with full-slate eval and determinism fixed (`RESULTS.md` P0 lists the three gaps). **Anurag:** P5 `make eval` on `config.FINAL` scores. **Both:** agree the P5 split (`PLAN.md` §2), and pin the scores-file format in `SPEC.md` before NRMS scores are written |
+| Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
+| Phase | **P1, P2 done/locked (Anurag). P3.1 done (C-025). P3.4a done (C-026). P3.2–3.4 done (C-028–C-030): EB-NeRD +0.0074 AUC [+0.0066, +0.0081] "beats" pending Anurag's review; MIND null.** P4, P5, P6 open. Open for Q2: D1 framing (b) |
+| Team | Per C-019/C-027. Anurag: P5 joint (`make eval`, submission pipeline for `config.FINAL`), reviews Q3 "beats". Aayush: P4, P5 joint, P6 joint. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
+| Anurag Kaushal | **Please review** the EB-NeRD "beats" line: `RESULTS.md` Q3.2–3.4, records `data/processed/paired/ebnerd_row2_vs_row1.json` (regenerate with the `make paired` command there). Also still open from P0: `src/eval/scores.py` (P0.8 writer/validator — the harness has its own reader meanwhile), Kaggle datasets for the large files (5–6), and the reranker's `config.FINAL` scores file so reranker-vs-NRMS can be paired |
+| Aayush Pandey | Next: **P4** (`make bench`: index + feature-store memory, p50/p95/p99 latency, cost/1k queries, 10× argument) — local, no GPU. Then P5 joint, P6. Read C-029/C-030 before the note: the freshness result is small and the reasons are recorded |
+| Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
+| Blocked on | Anurag's review of the Q3 claim; `scores.py` and the reranker scores file for the reranker-vs-NRMS comparison |
+| Next up | **Aayush:** P4 plan. **Anurag:** review C-030; land P0.8; P5 `make eval` + first submission by Wed 16 Sep |
 
 ---
 
@@ -932,6 +932,36 @@ Entry format:
 - Command: the inline check in `AI_USAGE.md` (this session); to be turned into
   `scripts/check_fresh_signal.py` with the outcome entry.
 - Affects: interpretation of P3.2–3.4; nothing in the runs
+- Status: active
+
+### C-030 · P3.2–3.4 outcome: freshness term — small significant gain on EB-NeRD (pending Anurag's review), null on MIND
+- Date / author: 2026-09-14 06:45 · Aayush Pandey's agent (Claude Code), unattended overnight run
+- Result (`RESULTS.md` Q3.2–3.4; ledger `a2-nrms-ebnerd-fresh` v5, `a2-nrms-mind-fresh` v6;
+  paired records `data/processed/paired/{ebnerd,mind}_row*.json`):
+  - **EB-NeRD:** NRMS + freshness AUC 0.5674 vs NRMS 0.5600; paired Δ **+0.0074 [+0.0066, +0.0081]**,
+    MRR +0.0094, nDCG@5 +0.0121, nDCG@10 +0.0092, every CI > 0. The harness's verdict is "beats";
+    **recorded as pending Anurag Kaushal's review (C-019)**, not yet as a result.
+  - **MIND:** Δ AUC −0.0006 [−0.0014, +0.0002] and every other CI covers 0: **null**. The masked
+    row equals the unmasked one (Δ 0.000 ± 0.0002): the model learned to ignore the term.
+- Against the pre-registration (C-028): MIND as predicted. EB-NeRD right in sign and significance,
+  **wrong in magnitude** (+0.007 vs ≥ +0.03), for the reason C-029 gave before the run: the A1
+  evidence was pooled importance; within-slate freshness signal is small. The gap to the locked
+  reranker moves from 0.113 to 0.106.
+- Two findings for the design note:
+  1. **Inference-time masking is a dependence check, not a removal.** On EB-NeRD the encoders
+     co-adapted to the term (masked: −0.017, below the baseline). The clean "component removed"
+     row is the baseline trained without the term (row 1). Q3.3's isolation is row 2 − row 1.
+  2. **Sampled-slate validation overstates changes.** Holdout `val_auc` on wu2019 5-candidate
+     slates: +0.076; full slates: +0.007. This is why §13.2 evaluates on full slates.
+- Decisions: P3.2–3.4 are complete as specified (one change, ablation, paired CIs on both
+  datasets). No second change is attempted: the remaining budget (main 17.8 h, alt 27.6 h) is
+  reserved for P4/P5 needs and one contingency rerun. `RESULTS.md` carries the "beats" line
+  with the pending-review tag until Anurag confirms.
+- Process notes: eight demo-check runs preceded the two full runs (ledger); every failure was
+  the agent's (dash has no `pipefail`; wu2019 gives k rows per impression; TF1 sessions cannot
+  share weights in one process; `Sequential` inside `TimeDistributed` has no standalone input in
+  TF1). Two full runs, two accounts, in parallel, 5 h wall (C-027).
+- Affects: `RESULTS.md` Q3.2–3.4, `PLAN.md` §3 P3.2–3.4 status, D4 closed
 - Status: active
 
 ---
