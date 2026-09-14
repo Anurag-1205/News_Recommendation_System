@@ -16,15 +16,15 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-14 06:50 by Aayush's agent (Claude Code), end of an unattended overnight run_
+_Last updated: 2026-09-14 13:00 by Aayush's agent (Claude Code)_
 
 | | |
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
-| Phase | **P1, P2 done/locked (Anurag). P3.1 done (C-025). P3.4a done (C-026). P3.2–3.4 done (C-028–C-030): EB-NeRD +0.0074 AUC [+0.0066, +0.0081] "beats" pending Anurag's review; MIND null.** P4, P5, P6 open. Open for Q2: D1 framing (b) |
+| Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030): EB-NeRD +0.0074 AUC "beats" pending Anurag's review; MIND null. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
 | Team | Per C-019/C-027. Anurag: P5 joint (`make eval`, submission pipeline for `config.FINAL`), reviews Q3 "beats". Aayush: P4, P5 joint, P6 joint. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
 | Anurag Kaushal | **Please review** the EB-NeRD "beats" line: `RESULTS.md` Q3.2–3.4, records `data/processed/paired/ebnerd_row2_vs_row1.json` (regenerate with the `make paired` command there). Also still open from P0: `src/eval/scores.py` (P0.8 writer/validator — the harness has its own reader meanwhile), Kaggle datasets for the large files (5–6), and the reranker's `config.FINAL` scores file so reranker-vs-NRMS can be paired |
-| Aayush Pandey | Next: **P4** (`make bench`: index + feature-store memory, p50/p95/p99 latency, cost/1k queries, 10× argument) — local, no GPU. Then P5 joint, P6. Read C-029/C-030 before the note: the freshness result is small and the reasons are recorded |
+| Aayush Pandey | **P4 done (C-031)**: `make bench DATASET=ebnerd|mind`, RESULTS.md Q4 complete. Next: P5 joint (with Anurag's `make eval`; the reranker-vs-NRMS pairing once his scores file exists), then P6 (note sections: Q3 with C-029/C-030's reasons, Q4's 10× argument) |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
 | Blocked on | Anurag's review of the Q3 claim; `scores.py` and the reranker scores file for the reranker-vs-NRMS comparison |
 | Next up | **Aayush:** P4 plan. **Anurag:** review C-030; land P0.8; P5 `make eval` + first submission by Wed 16 Sep |
@@ -962,6 +962,40 @@ Entry format:
   share weights in one process; `Sequential` inside `TimeDistributed` has no standalone input in
   TF1). Two full runs, two accounts, in parallel, 5 h wall (C-027).
 - Affects: `RESULTS.md` Q3.2–3.4, `PLAN.md` §3 P3.2–3.4 status, D4 closed
+- Status: active
+
+### C-031 · P4 done: the serving benchmark protocol, its numbers, and what breaks at 10×
+- Date / author: 2026-09-14 · Aayush Pandey (Claude Code)
+- Protocol decisions (SPEC §16): one request = (user, t) → candidates → `config.FINAL` features →
+  score; two framings measured, (a) the impression's own slate (what ships) and (b) BM25 ∪ ANN
+  top-K then rerank (Q4.2's wording); **one core** (`taskset -c 0`, LightGBM/OpenMP/BLAS single
+  thread) so cost is per vCPU; 1,000 seeded validation impressions after 100 warm-ups; cost with
+  ρ = 0.5 and AWS c7i on-demand $0.0425/vCPU-h (URL + date in RESULTS); memory as RSS delta per
+  component (Python overhead included — the honest number for this implementation).
+- The per-request path (`src/serving/`) is held to the batch path by a **bit-identical parity
+  test** on 200 real impressions per dataset. It caught two skews before any number was
+  recorded: (1) the user store had merged train ∪ validation history while the batch path reads
+  the split's own snapshot; (2) the model was fed float64 where training used float32 — 11/8,360
+  MIND rows flipped at tree thresholds. Both fixed; both would have shipped silently otherwise.
+  The served models are `config.FINAL` refits that reproduce Q2 exactly (0.6728 / 0.6747),
+  cached under `data/processed/models/`.
+- Numbers (`RESULTS.md` Q4): (a) p99 **1.7 ms** EB-NeRD / **3.4 ms** MIND, 790 / 550 req/s per
+  core, ≈ $0.0001 per 1k queries; (b) K=100 p99 **72 / 86.5 ms**, of which BM25 60 / 74 ms and
+  flat ANN 8.4 / 8.9 ms; ≈ $0.0012–0.0014 per 1k. RSS after build 1.16 / 1.38 GB.
+- Two bottlenecks found by measuring: the category-profile features recomputed per candidate
+  (47 → 1.7 ms p99 once cached per request, definitions unchanged, parity kept); and A1's
+  pure-Python BM25 postings scan on 82–128-token queries, which is 80 % of framing (b).
+- **10× verdict:** (a) scales on every axis, memory only. (b) fails at ≈ 1.4× more articles on
+  BM25 (≈ 600–740 ms p99 at 10×); the fix is a compiled index with top-k pruning, not the model.
+  The feature store (`RollingCounts`) stores every event as a Python datetime (57 B/event,
+  1.6–3.5 GB at 10×) — a live system keeps windowed aggregates. GBDT scoring is O(K), 1–3 ms,
+  and never the constraint.
+- Assets: `data/interim/ebnerd/Ekstra_Bladet_word2vec/document_vector.parquet` (sha256
+  613f27b5…) and `data/processed/mind_minilm.npz` (eb920313…, 125,590 × 384) produced by the
+  CPU kernel `a2-assets-p4` (ledger), so the laptop needs no torch. `MINDlarge_test.zip` added to
+  the private dataset for the full corpus.
+- Affects: `src/serving/` (new), `scripts/bench.py`, `Makefile` (`bench`), `SPEC.md` §16,
+  `RESULTS.md` Q4, `tests/test_serving.py`, `tests/test_cost.py`
 - Status: active
 
 ---

@@ -539,7 +539,103 @@ this week: main 12.2 h of 30, alt 2.5 h of 30. Laptop: each `make paired` on EB-
 
 _Not started._
 
-## Q4 · Serving and scale
+## Q4 · Serving and scale — 2026-09-14, Aayush Pandey (P4, SPEC.md §16, CONTEXT.md C-031)
+
+**Setup.** The locked two-stage reranker (`config.FINAL`) on A1's stage 1, assembled into a
+per-request path (`src/serving/`) that reproduces the batch path **bit for bit** on 200 real
+impressions per dataset (`tests/test_serving.py`; two skews caught on the way: the history snapshot
+and a float64/float32 mismatch that flipped 11/8,360 MIND scores at tree thresholds). The served
+model is `config.FINAL` refitted by `src/serving/models.py`, which reproduces Q2's locked numbers
+exactly: EB-NeRD AUC 0.67283 [0.6710, 0.6745] (58 s fit), MIND 0.67472 [0.6725, 0.6768] (49 s).
+
+Command: `make bench DATASET=ebnerd` / `make bench DATASET=mind` = `taskset -c 0 python scripts/bench.py`.
+Machine: Intel i7-14650HX laptop, **one core**, LightGBM `num_threads=1`, OpenMP/BLAS 1 thread;
+1,000 seeded validation impressions (seed 0) after 100 warm-ups. Records:
+`data/processed/bench_ebnerd.json`, `bench_mind.json` (every number below, hardware, commit).
+
+### Q4.1 · Memory
+
+| component | what it holds | EB-NeRD disk / RAM | MIND disk / RAM |
+|---|---|---|---|
+| articles | title tokens, category, first-known time | 150.8 MB / 49.5 MB | 74.7 MB / (inside BM25) |
+| BM25 inverted index | postings + forward index (Python dicts/lists) | — / **412.1 MB** (125,541 docs, 120,400 terms) | — / 203.4 MB (65,238 docs) |
+| ANN index (FAISS flat) | `ntotal × d × 4` | 153.6 MB / 150.6 MB (125,541 × 300) | 179.1 MB / 192.9 MB (125,590 × 384) |
+| popularity counts (`RollingCounts`) | one timestamp list per article per event type | 10.3 MB / 160.1 MB (1,892 articles, 2.8 M events) | 92.0 MB / 347.4 MB (7,713 articles) |
+| user store | last-5 ids + click log with categories per user | 21.8 MB / 182.7 MB (15,342 users) | 42.8 MB / 156.7 MB (50,000 users) |
+| session store | pre-*t* session position per impression | 11.3 MB / 48.6 MB (244,647) | n/a |
+| **process RSS after build** | | **1.16 GB** (peak 2.41 GB incl. the batch-path comparison) | **1.38 GB** (peak 1.40 GB) |
+| build time | | 7 s | 6 s |
+
+RAM is the RSS delta while building each component, so it includes Python-object overhead — the
+honest number for this implementation. Two of it are pathological and are the 10× story below:
+the BM25 index (≈ 3.3 KB per document in dicts) and the event-level counts (≈ 57 B per event).
+
+### Q4.2 · Latency (p50 / p95 / p99 of one request on one core, ms)
+
+| request | EB-NeRD total | of which: retrieve (BM25 / ANN) | features | score | cands | req/s |
+|---|---|---|---|---|---|---|
+| **(a) rerank the impression** — what ships | **1.23 / 1.50 / 1.71** | 0.1 | 1.3 | 0.4 | 12.1 | **790** |
+| (b) retrieve K=100 ∪ K=100, then rerank | 48.0 / 65.9 / **72.0** | 68.2 (**60.0** / 8.4) | 2.9 | 0.9 | 198 | 21 |
+| (b) K=200 | 50.5 / 67.1 / 74.9 | 69.2 (60.7 / 8.8) | 4.2 | 1.6 | 395 | 20 |
+| (a), naive — profile recomputed per candidate (first measurement) | 8.7 / 29.6 / 47.3 | 0.1 | 46.8 | 0.5 | 12.1 | 85 |
+| P2 batch path, same 1,000 impressions | 0.85 mean | | | | | |
+
+| request | MIND total | retrieve (BM25 / ANN) | features | score | cands | req/s |
+|---|---|---|---|---|---|---|
+| **(a)** | **1.66 / 2.66 / 3.37** | 0.2 | 1.1 | 2.2 | 37.2 | **550** |
+| (b) K=100 | 61.9 / 78.7 / **86.5** | 82.5 (**73.9** / 8.9) | 1.7 | 2.5 | 189 | 17 |
+| (b) K=200 | 63.7 / 80.4 / 88.2 | 81.9 (73.3 / 8.9) | 2.9 | 3.5 | 378 | 16 |
+| P2 batch path | 1.96 mean | | | | | |
+
+Reading it, by service demand (D = V·S):
+
+- **(a) is cheap:** p99 1.7 / 3.4 ms; the per-request overhead over the batch path is ≈ 1.5×.
+  The first measurement was 47 ms p99 — the two category-profile features recomputed the user's
+  decayed click masses once *per candidate*; computing them once per request (same definitions,
+  parity kept) removed 96 % of the features time. Found by measuring, not by guessing.
+- **(b) is retrieval-bound, and BM25-bound:** the pure-Python postings scan for an 82-token
+  (EB-NeRD) / 128-token (MIND) query — five clicked titles + subtitles/abstracts — costs 60–74 ms
+  p99 and is **independent of K** (K=200 adds ≈ 3 ms of features/scoring). The flat FAISS scan of
+  125k × 300–384 vectors costs 8.4–8.9 ms. Features for ≈ 200 candidates: 3 ms. GBDT: 1–3 ms.
+- **MIND's (a) scoring is 2.2 ms for 37 candidates:** sklearn `predict_proba` call overhead, not
+  tree work (LightGBM on EB-NeRD does 12 candidates in 0.4 ms).
+
+### Q4.3 · Cost at p99 < 100 ms
+
+Model (SPEC §16.2): cores = ⌈QPS × mean service / ρ⌉ with ρ = 0.5 (M/M/1 mean wait = one service
+time, so p99 stays near the single-request p99); cost/1k = cores × price / (QPS × 3.6).
+Price: **$0.0425 per vCPU-hour** = AWS EC2 on-demand c7i.large (2 vCPU, $0.085/h), us-east-1,
+https://aws.amazon.com/ec2/pricing/on-demand/ read 2026-09-14. All numbers per one vCPU of
+this laptop's class; a cloud vCPU is a hyperthread and typically slower, so treat cores as a
+lower bound.
+
+| dataset · framing | mean / p99 | 100 QPS | 1,000 QPS | SLA (p99 < 100 ms) |
+|---|---|---|---|---|
+| EB-NeRD (a) | 1.26 / 1.71 ms | 1 core, **$0.00012 / 1k** | 3 cores, **$0.00004 / 1k** | holds |
+| EB-NeRD (b) K=100 | 48.0 / 72.0 ms | 10 cores, $0.00118 / 1k | 96 cores, $0.00113 / 1k | holds, 28 ms of headroom |
+| MIND (a) | 1.81 / 3.37 ms | 1 core, $0.00012 / 1k | 4 cores, $0.00005 / 1k | holds |
+| MIND (b) K=100 | 59.9 / 86.5 ms | 12 cores, $0.00142 / 1k | 120 cores, $0.00142 / 1k | holds, 13 ms of headroom |
+
+Ten cents per million requests for the shipped path; a dollar per million for retrieve-then-rerank.
+
+### Q4.4 · 10× — what breaks first (RUM: reads, updates, memory, from the measured shares)
+
+| 10× in… | reads per request | updates per event | memory | what breaks |
+|---|---|---|---|---|
+| **articles** (1.25 M) | BM25 scans ≈ 10× the postings for the same 82–128 query tokens → **≈ 600–740 ms p99**; flat ANN does 10 × `ntotal × d` → ≈ 85–90 ms alone | none | BM25 dicts 4.1 GB, ANN 1.5–1.9 GB | **(b) breaks first, on BM25**: the SLA is gone by 6×. Fix in order of payoff: a compiled index with top-k pruning (WAND/MaxScore — reads ∝ K·log N, not N), query truncation (titles only halves the tokens), then IVF/HNSW for the ANN. **(a) is unaffected**: it never scans the corpus |
+| **users** (150 k–500 k) | unchanged (per-user dict lookups) | history append per click | user store 1.6–1.8 GB (≈ 12 KB/user as polars frames) | nothing in latency; memory only. A compact log (int64 ids + timestamps, ≈ 100 B/click) cuts it 10× |
+| **events** (counts) | unchanged (bisect on a per-article list) | one list append per view and per click | counts 1.6–3.5 GB — the store keeps **every** event as a Python datetime | the feature store's memory: the only component that grows without bound. A live system keeps windowed aggregates (`pop_total`/`ctr_total` need two integers per article), not events |
+| **QPS** (10 k) | unchanged per request | unchanged | unchanged | cores scale linearly: (a) ≈ 26–37 cores, (b) ≈ 960–1,200; the (b) bill grows 10× with no way down except the BM25 fix |
+
+So: the shipped path (a) scales to 10× on all three axes with only memory to buy; the literal
+retrieve-then-rerank path (b) is already within 13–28 ms of the SLA and fails at ≈ 1.4× more
+articles, because A1's BM25 is a Python postings scan. The stage that decides the 10× question is
+not the model — GBDT scoring is 1–3 ms and O(K) — but the lexical index.
+
+**Serving-time honesty.** Every served feature is in `config.FINAL`, which `model_features`
+already filtered for serving safety (C-013); the per-request path uses strict `< t` lookups
+(tested). Q4.5: this is a measured local benchmark plus a scaling argument, as the brief allows.
+
 
 _Not started._
 

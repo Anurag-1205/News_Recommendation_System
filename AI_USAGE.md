@@ -725,3 +725,26 @@ human-written code. Both team members append here. Chat exports are submitted wi
   EB-NeRD. Logged before the full runs so the prediction's failure on magnitude is not hindsight.
 - Departure from CLAUDE.md §3: the agent committed and pushed throughout, on Aayush's standing
   instruction (memory + this log). Never force-pushed.
+
+### 2026-09-14 · Aayush Pandey · Claude Code (Opus 5) · P4: serving & scale benchmark
+- Asked: "lets start on P4" (plan mode; Aayush chose both datasets and both framings), then
+  progress questions while the assets kernel ran.
+- Produced (AI-generated, reviewed by Aayush): `src/serving/{state,request,models,cost}.py`,
+  `scripts/bench.py`, `make bench`, `scripts/kaggle/assets_p4/` (word2vec + MiniLM vectors on a
+  CPU kernel, 59 min, mostly MiniLM encoding at 39 articles/s), `tests/test_serving.py` (7),
+  `tests/test_cost.py` (3); SPEC §16; RESULTS.md Q4; C-031; PLAN status; ledger row.
+- Verified by: bit-identical parity of features and scores with the batch path on 200 real
+  impressions per dataset; `config.FINAL` refits reproducing Q2's 0.6728 / 0.6747; hand-computed
+  cost example; `make test` 363 passed; every RESULTS number copied from `bench_*.json`.
+- Failed / corrected:
+  - Parity caught two real train/serve skews: (1) user store built from train ∪ validation
+    history (batch uses the split's snapshot) — 1 % off on the profile features; (2) float64
+    fed to a float32-trained HistGBDT — 11/8,360 MIND scores flipped at tree thresholds.
+  - `Booster.reset_parameter({"num_threads": 1})` on a file-loaded LightGBM Booster segfaults;
+    the Booster is loaded with `params={"num_threads": 1}` instead.
+  - polars `iter_rows(named=True)` yields plain lists, not Series (`.to_list()` failed twice).
+  - The first latency measurement (47 ms p99 for framing (a)) was an implementation bottleneck —
+    profile masses recomputed per candidate; cached per request (definitions unchanged, parity
+    kept) → 1.7 ms. Reported as the "naive" row rather than hidden.
+  - `_profile_masses` ran on MIND (string user ids vs an Int64 empty-log schema); guarded by
+    feature need.

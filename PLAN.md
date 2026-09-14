@@ -126,7 +126,7 @@ new work.
 | **P3.1** Reproduce NRMS | Q3.1 | 12–15 Sep | **Aayush** | NRMS on both datasets (Kaggle, float32 — C-022); our number vs the published one; score files written | ☑ done 14 Sep (C-025) |
 | **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☑ done 14 Sep (C-026): adopted + moved; `make paired` |
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☑ done 14 Sep (C-030): EB-NeRD +0.0074 AUC, CI > 0 (review pending); MIND null |
-| **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☐ |
+| **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☑ done 14 Sep (C-031): (a) p99 1.7/3.4 ms, (b) 72/87 ms, BM25 breaks first at 10× |
 | **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag & Aayush** | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
 | **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ☐ |
 
