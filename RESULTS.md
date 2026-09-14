@@ -655,9 +655,99 @@ already filtered for serving safety (C-013); the per-request path uses strict `<
 
 _Not started._
 
-## Q5 · Extended evaluation and leaderboard submissions
+## Q5 · Extended evaluation and leaderboard submissions — 2026-09-15, Anurag Kaushal (P5, SPEC.md §17)
 
-_Not started._
+**Status: the harness and the extended metrics are done; the Codabench submissions are not.** The
+locked reranker's scores exist for both evaluation splits, `make eval` reports every Q5 metric with
+both required slices, and the reranker has been paired against Aayush's NRMS. Still open: test-set
+inference and the two leaderboard uploads with their screenshots.
+
+### The scores files (SPEC.md §13.3 contract)
+
+Command: `PYTHONPATH=. .venv/bin/python -u scripts/score_final.py --dataset ebnerd|mind`. Each
+fits `src/rerank/config.FINAL` (C-018) on the same seeded training sample as the measured runs and
+scores **every impression** of the evaluation split, because the contract requires 1:1 alignment
+with the other systems' files.
+
+| File | Rows | Impressions | Model |
+|---|---|---|---|
+| `data/scores/ebnerd/validation/reranker_final.parquet` | 2,928,942 | 244,647 | lambdarank, 11 features |
+| `data/scores/mind/MINDsmall_dev/reranker_final.parquet` | 2,740,998 | 73,152 | pointwise, 7 features |
+
+Both match Aayush's NRMS files row for row, so every pairing below is over the full split.
+
+### `make eval` — EB-NeRD, all 244,647 validation impressions
+
+Command: `make eval SCORES=data/scores/ebnerd/validation/reranker_final.parquet JSON=data/processed/eval/ebnerd_reranker_final.json`
+(top-10 for the beyond-accuracy trio; bootstrap 95% CI over impressions, 1,000 resamples, seed 0).
+
+| slice | impressions | AUC | MRR | nDCG@5 | nDCG@10 | diversity | novelty | coverage | Gini |
+|---|---|---|---|---|---|---|---|---|---|
+| all | 244,647 | 0.6734 [0.6723, 0.6746] | 0.4376 [0.4362, 0.4388] | 0.4985 [0.4971, 0.4999] | 0.5509 [0.5497, 0.5520] | 0.7864 | 17.118 | 0.8568 | 0.8097 |
+| cold | 887 | 0.6749 [0.6570, 0.6934] | 0.4308 [0.4094, 0.4518] | 0.4830 [0.4594, 0.5048] | 0.5431 [0.5245, 0.5612] | 0.7891 | 17.053 | 0.2370 | 0.4529 |
+| warm | 243,760 | 0.6734 [0.6722, 0.6745] | 0.4376 [0.4363, 0.4389] | 0.4986 [0.4973, 0.4999] | 0.5509 [0.5498, 0.5521] | 0.7864 | 17.118 | 0.8558 | 0.8095 |
+| head | 4,704 | 0.7537 [0.7461, 0.7617] | 0.4923 [0.4824, 0.5029] | 0.5403 [0.5297, 0.5513] | 0.5834 [0.5740, 0.5931] | 0.7739 | 13.391 | 0.4116 | 0.7675 |
+| tail | 239,943 | 0.6718 [0.6707, 0.6730] | 0.4365 [0.4351, 0.4377] | 0.4977 [0.4963, 0.4990] | 0.5503 [0.5491, 0.5514] | 0.7867 | 17.191 | 0.8509 | 0.8107 |
+
+### `make eval` — MIND, all 73,152 dev impressions
+
+Command: `make eval SCORES=data/scores/mind/MINDsmall_dev/reranker_final.parquet JSON=data/processed/eval/mind_reranker_final.json`.
+
+| slice | impressions | AUC | MRR | nDCG@5 | nDCG@10 | diversity | novelty | coverage | Gini |
+|---|---|---|---|---|---|---|---|---|---|
+| all | 73,152 | 0.6747 [0.6725, 0.6768] | 0.3295 [0.3272, 0.3321] | 0.3630 [0.3603, 0.3657] | 0.4217 [0.4193, 0.4243] | 0.8085 | 15.825 | 0.5733 | 0.9463 |
+| cold | 12,982 | 0.6336 [0.6284, 0.6385] | 0.3412 [0.3356, 0.3471] | 0.3674 [0.3612, 0.3741] | 0.4236 [0.4180, 0.4295] | 0.8560 | 15.715 | 0.2984 | 0.9173 |
+| warm | 60,170 | 0.6836 [0.6813, 0.6857] | 0.3270 [0.3244, 0.3296] | 0.3620 [0.3592, 0.3650] | 0.4213 [0.4186, 0.4241] | 0.7983 | 15.848 | 0.5496 | 0.9430 |
+| head | 21,098 | 0.7304 [0.7271, 0.7335] | 0.3379 [0.3338, 0.3423] | 0.3907 [0.3859, 0.3957] | 0.4444 [0.4400, 0.4491] | 0.8010 | 14.730 | 0.3898 | 0.9268 |
+| tail | 52,054 | 0.6521 [0.6496, 0.6548] | 0.3261 [0.3232, 0.3292] | 0.3518 [0.3486, 0.3552] | 0.4125 [0.4096, 0.4154] | 0.8116 | 16.268 | 0.5170 | 0.9439 |
+
+**Two checks that the harness is measuring the right thing.**
+
+- **MIND's "all" row reproduces Q2 exactly** (0.6747 AUC): Q2 already evaluated MIND on the whole
+  dev split, so the two must agree, and they do to four decimals on every metric.
+- **EB-NeRD's "all" row sits where Q2's two samples predict.** Q2 measured 0.6728 on a 100,000-impression
+  sample and 0.6738 on its disjoint 144,647-impression holdout; their impression-weighted mean is
+  0.67339, against 0.6734 measured here on the union.
+
+### What the slices say
+
+- **Head impressions are much easier on both datasets** (+0.080 AUC on EB-NeRD, +0.078 on MIND
+  against their tails). The model ranks articles it has seen clicked in training far better than
+  the ones it has not — the same coverage problem A1 measured, now quantified per slice.
+- **Cold-start splits the datasets.** On MIND, cold users lose 0.050 AUC against warm ones
+  (0.6336 vs 0.6836): with ≤ 5 history clicks the profile and category features have almost
+  nothing to work with. On EB-NeRD cold users are statistically indistinguishable (0.6749 vs
+  0.6734), but only **887 of 244,647** impressions are cold there, so that CI is wide
+  [0.6570, 0.6934] and the comparison is weak.
+- **Coverage is low where it is measured on fewer impressions** (cold 0.24 / 0.30) — coverage is a
+  union over recommendations, so it scales with how many impressions the slice contains and is not
+  comparable across slices of different sizes. Gini is the comparable concentration number.
+- **Novelty is lower on head impressions** (13.4 vs 17.2 on EB-NeRD), which is the definition
+  working: head impressions are the ones whose clicked article is popular.
+
+### Reranker vs NRMS — the definitive comparison (paired, SPEC.md §14)
+
+Command per row: `make paired A=data/scores/<ds>/<split>/<nrms|nrms_fresh>.parquet B=data/scores/<ds>/<split>/reranker_final.parquet JSON=data/processed/paired/<ds>_reranker_vs_<system>.json`.
+
+| Comparison, Δ = reranker − NRMS | AUC | MRR | nDCG@5 | nDCG@10 |
+|---|---|---|---|---|
+| **EB-NeRD** vs NRMS (Q3.1 baseline) | **+0.1134 [+0.1117, +0.1151]** | +0.0885 [+0.0868, +0.0900] | +0.1101 [+0.1084, +0.1119] | +0.0841 [+0.0827, +0.0854] |
+| **EB-NeRD** vs NRMS + freshness (Q3.2, their best) | **+0.1060 [+0.1045, +0.1076]** | +0.0791 [+0.0776, +0.0807] | +0.0980 [+0.0964, +0.0997] | +0.0750 [+0.0737, +0.0763] |
+| **MIND** vs NRMS | **+0.0080 [+0.0059, +0.0101]** | +0.0075 [+0.0057, +0.0096] | +0.0073 [+0.0052, +0.0096] | +0.0033 [+0.0014, +0.0052] |
+| **MIND** vs NRMS + freshness | **+0.0086 [+0.0065, +0.0108]** | +0.0068 [+0.0049, +0.0088] | +0.0065 [+0.0043, +0.0087] | +0.0035 [+0.0016, +0.0054] |
+
+**The feature-based reranker beats the neural baseline on both datasets, on every metric, with
+every CI excluding 0** — but the margins are of different orders. On EB-NeRD it is +0.11 AUC, a
+gap the freshness term closes only slightly (0.1134 → 0.1060). On MIND it is +0.008, small but
+significant. The honest reading is that NRMS was trained on `ebnerd_small` / `MINDsmall_train`
+under a fixed recipe and 5 epochs, while the reranker consumes A1's stage-1 scores plus
+point-in-time behavioural features; this is a comparison of *systems as built here*, not a claim
+about the architectures in general.
+
+### Still open in Q5
+
+Test-set inference for `config.FINAL` on both Codabench test files, the two uploads, and the
+screenshots. That is the remaining mandatory item of the brief.
 
 ## Q9 · With and without serving-unavailable features
 

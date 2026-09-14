@@ -41,8 +41,9 @@ paired: env  ## paired bootstrap of two scores files: make paired A=a.parquet B=
 	@test -n "$(A)" -a -n "$(B)" || (echo "usage: make paired A=<scores.parquet> B=<scores.parquet> [JSON=<record.json>]"; exit 2)
 	PYTHONPATH=. $(PY) scripts/paired_compare.py $(A) $(B) $(if $(JSON),--json $(JSON))
 
-eval:  ## full two-stage metrics, slices, bootstrap CIs (A2 Q5)
-	@echo "make eval: not implemented (A2 P5)"; exit 1
+eval: env  ## Q5: extended metrics + slices for a scores file: make eval SCORES=s.parquet [K=10] [JSON=out.json]
+	@test -n "$(SCORES)" || (echo "usage: make eval SCORES=<scores.parquet> [K=10] [JSON=<record.json>]"; exit 2)
+	PYTHONPATH=. $(PY) scripts/eval_a2.py --scores $(SCORES) $(if $(K),--k $(K)) $(if $(JSON),--json $(JSON))
 
 bench: env  ## Q4 serving benchmark on ONE core: make bench DATASET=ebnerd|mind (memory, p50/p95/p99, cost)
 	@test -n "$(DATASET)" || (echo "usage: make bench DATASET=ebnerd|mind"; exit 2)

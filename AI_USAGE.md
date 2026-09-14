@@ -783,3 +783,50 @@ human-written code. Both team members append here. Chat exports are submitted wi
   reproduction step is done, the remaining integrity checks (label join, framing, no truncation,
   the masked row-3 control) are not, and no `RESULTS.md` number was touched, as instructed.
 - Failed / corrected: nothing failed in this step.
+
+### 2026-09-15 · Anurag Kaushal · Claude Code (Opus 5) · C-019 sign-off, Q9 adopted, P5 part 1 (scores, `make eval`, reranker vs NRMS)
+- Asked: "Complete the C-019 Review: Execute your remaining checks: verify the label join
+  mechanics, confirm 100% impression overlap with no truncation, and evaluate the row-3 masked
+  control. If everything passes, update RESULTS.md Q3.2–3.4 marking the claim as 'Reviewed and
+  verified by Anurag.' Update CONTEXT.md to reflect Aayush is unblocked. Adopt Q9 (Anti-Gaming):
+  I (Anurag) will take ownership of Q9 … Update PLAN.md and CONTEXT.md. Start Phase 5 (Make Eval):
+  Run the write_scores pipeline … Execute the make eval harness … Execute the make paired check
+  against Aayush's nrms baseline scores … Halt and Document: Report the extended Phase 5 make eval
+  metrics directly in the chat. Stage the files and append this prompt to AI_USAGE.md. Do not
+  commit yet."
+- Produced (AI-generated, to be reviewed by Anurag):
+  - `scripts/score_final.py`, `scripts/eval_a2.py`, `src/eval/slices.py`,
+    `tests/test_eval_slices.py` (11 tests), the `make eval` target (was a stub), `SPEC.md` §17.
+  - `RESULTS.md`: the Q3.2–3.4 reviewer block and the whole Q5 section.
+  - `CONTEXT.md`: C-033 (review verdict), C-034 (Q9 ownership), C-035 (P5 part 1), §1 state.
+  - `PLAN.md`: Q9 rows in §2 and §3 naming Anurag as owner.
+- Verified by:
+  1. **The review's three remaining checks, all passed.** Coverage: both NRMS files carry
+     2,928,942 rows over 244,647 impressions, equal to the split's own slate-length sum and
+     impression count, with identical key sets and per-impression counts equal to the slate
+     lengths. Labels: no score file has a label column, and `split_labels` matched an independent
+     reconstruction (`candidate_frame`, labels by clicked-id membership) on **all 2,928,942 rows**,
+     245,622 positives each. Masked control: reproduced bit-identically at −0.0174 AUC.
+  2. **A data fact found while checking:** the split lists 246,289 clicked ids but 245,622 distinct
+     positives; the difference is exactly 667 duplicate clicked ids inside impressions, deduped
+     identically by both label paths. Every clicked id is in its own slate, so no impression is
+     unrankable.
+  3. **The harness self-checks against Q2.** MIND's "all" row reproduces Q2's 0.6747 exactly (same
+     full dev split); EB-NeRD's 0.6734 over 244,647 sits on the impression-weighted mean of Q2's
+     0.6728 (100k sample) and 0.6738 (its disjoint 144,647 holdout) = 0.67339.
+  4. **Scores files align 1:1 with Aayush's** — same row and impression counts on both datasets, so
+     every pairing covers the full split.
+- Failed / corrected:
+  - My first `eval_a2.py` emitted two Polars deprecation warnings (`is_in` with a Series,
+    `explode` inside `select`) that would break on Polars 2.0. Fixed, then **re-ran both
+    evaluations and diffed the JSON records: every value identical**, and the warnings are gone.
+  - I wrote both review records to `*_review_anurag.json` rather than the paths in Aayush's
+    records: rerunning into his filenames would have overwritten the artifacts under review.
+- Judgement calls flagged for review:
+  - **Head/tail is defined on the training clicks**, so "popular" never depends on the evaluation
+    split's own labels; an impression is head when one of its clicked articles is in that top
+    quintile. Cold is A1's ≤ 5 history clicks. Both are pinned by tests and stated in SPEC §17.
+  - **Coverage is not comparable across slices** (it is a union over recommendations, so it grows
+    with slice size); Gini is the comparable concentration number. Said so in RESULTS.
+  - The reranker-vs-NRMS verdict is reported as a comparison of **the systems as built here**, not
+    of the architectures.

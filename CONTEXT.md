@@ -16,18 +16,18 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-14 by Anurag (agent: Claude Code)_
+_Last updated: 2026-09-15 by Anurag (agent: Claude Code)_
 
 | | |
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
 | Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | Q3 review signed off (C-033). **Q9 (anti-gaming) is now mine (C-034)**: the feature registry (`UNSAFE_FEATURES`, `ABSENT_FROM_TEST_FILE`, `drop_unsafe`) and `config.FINAL` are mine, so the with/without serving-unavailable-features ablation belongs in the same hands; `PLAN.md` §2/§3 updated. Next: **P5 end to end (C-032)** — `config.FINAL` score files, `make eval`, test-set inference, both submissions, screenshots. Also open from P0: Kaggle datasets for the large files (5–6) |
+| Anurag Kaushal | **P5 part 1 done (C-035)**: `config.FINAL` scores for both splits, `make eval` (was a stub) with both slices, and the reranker-vs-NRMS pairings — the reranker beats NRMS on both datasets. **Remaining: test-set inference + the two Codabench uploads + screenshots**, plus Q9 (C-034). Earlier today: **hand-over archive installed**: sha256 matches, 27 files under `data/` (gitignored), `read_scores` on the MIND NRMS file returns 2,740,998 rows. **C-019 review of the EB-NeRD "beats" line: reproduction step done, verdict not yet recorded.** `make paired` on Aayush's two score files reproduced his record **bit-identically** (Δ AUC +0.0074 [+0.0066, +0.0081], all four verdicts "beats"); my record: `data/processed/paired/ebnerd_row2_vs_row1_review_anurag.json` (his file untouched). Remaining review checks before sign-off, then `RESULTS.md` Q3.2–3.4 gets the reviewer line. Then **P5 end to end (C-032)**: `config.FINAL` score files, `make eval`, test-set inference, both submissions, screenshots. Also open from P0: Kaggle datasets for the large files (5–6) |
 | Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
-| Blocked on | Nothing on Aayush's side for Q3 (C-033). He still needs the reranker's `config.FINAL` scores file for the reranker-vs-NRMS pairing. Anurag: Q9 (C-034) is adopted but not started |
-| Next up | **Anurag:** the `config.FINAL` scores files + `make eval`, then test-set inference + submissions, then Q9. **Aayush:** P6 — the Q3 and Q4 sections of the note |
+| Blocked on | Nothing on Aayush's side: Q3 signed off (C-033) and the reranker scores now exist, so his reranker-vs-NRMS pairing is done too (C-035). Anurag: the Codabench submissions (the last mandatory Q5 item) and Q9 (C-034, still `_Not started._`) |
+| Next up | **Anurag:** Kaggle datasets for the large files (P0.5–6) → test-set inference for `config.FINAL` on both test files → upload + screenshots; then Q9. Long runs go to Kaggle, not the laptop (C-004). **Aayush:** P6 Q3/Q4 note sections; the Q5 numbers in `RESULTS.md` are ready to review |
 
 ---
 
@@ -1073,6 +1073,39 @@ Entry format:
   `UNSAFE_FEATURES` ones, since it is serving-safe but missing from the Codabench test file.
 - Affects: `PLAN.md` §2 and §3 (P6 row), `RESULTS.md` Q9, this log
 - Status: active
+
+### C-035 · P5 part 1: the reranker's scores files, `make eval`, and the reranker-vs-NRMS verdict
+- Date / author: 2026-09-15 · Anurag Kaushal (Claude Code)
+- Built:
+  - `scripts/score_final.py` — writes `config.FINAL`'s scores to the §13.3 contract via Aayush's
+    `write_scores`. It fits on the same seeded training sample as the measured runs and scores
+    **every** impression of the evaluation split, so the files align 1:1 with the NRMS ones
+    (EB-NeRD 2,928,942 rows / 244,647 impressions; MIND 2,740,998 / 73,152 — both equal to his).
+  - `scripts/eval_a2.py` + `make eval SCORES=… [K=…] [JSON=…]` (SPEC.md §17): all four accuracy
+    metrics with bootstrap CIs, the beyond-accuracy trio over each impression's top-k, and the two
+    required slices. Labels are joined from the split and the join is asserted lossless.
+  - `src/eval/slices.py` + `tests/test_eval_slices.py` (11 tests): the slice definitions, kept at
+    A1's thresholds — cold ≤ 5 history clicks, head = top popularity quintile of the **training**
+    clicks, never-clicked articles are tail.
+- Correctness checks that came free with the design:
+  - MIND's "all" row **reproduces `RESULTS.md` Q2 exactly** (0.6747 AUC on the same full dev split).
+  - EB-NeRD's "all" row (0.6734 over 244,647) sits on the impression-weighted mean of Q2's two
+    disjoint samples (0.6728 on 100k, 0.6738 on the 144,647 holdout → 0.67339).
+- **Reranker vs NRMS (the note's headline comparison).** The reranker beats NRMS on both datasets,
+  every metric, every CI excluding 0: EB-NeRD **+0.1134 AUC** vs the baseline and **+0.1060** vs
+  Aayush's freshness variant; MIND **+0.0080** and **+0.0086**. Records in
+  `data/processed/paired/<ds>_reranker_vs_<system>.json`.
+  - Stated honestly in `RESULTS.md`: this compares the systems as built here (NRMS at a fixed
+    recipe and 5 epochs vs a reranker consuming A1 stage-1 scores plus behavioural features), not
+    the architectures in general.
+- Slice findings worth carrying into the note: head impressions are far easier on both datasets
+  (+0.08 AUC over tail); MIND cold users lose 0.050 AUC against warm, while EB-NeRD has only 887
+  cold impressions out of 244,647, so its cold CI is wide and that comparison is weak.
+- Affects: `scripts/score_final.py`, `scripts/eval_a2.py`, `src/eval/slices.py`,
+  `tests/test_eval_slices.py`, `Makefile` (`eval` target, was a stub), `SPEC.md` §17, `RESULTS.md` Q5
+- Status: active. **Remaining in P5: test-set inference, the two Codabench uploads, screenshots.**
+
+---
 
 ## 3 · Inherited from A1 (facts, not decisions to revisit)
 

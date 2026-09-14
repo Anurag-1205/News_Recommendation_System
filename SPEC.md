@@ -1168,3 +1168,47 @@ P2 uses (`scripts/rerank_*_a2.Stage1`, `src/rerank/*.load_*`).
   100k evaluation sample (EB-NeRD 0.6728, MIND 0.6747) — printed by `make bench` and asserted.
 - Every number in `RESULTS.md` Q4 is copied from `data/processed/bench_<dataset>.json`, which
   records hardware, commit, command and seed.
+
+---
+
+## 17 · A2 Phase 5 — Extended evaluation (Q5): `make eval`
+
+`scripts/eval_a2.py`, wired as `make eval SCORES=<scores.parquet> [K=10] [JSON=<record.json>]`.
+It takes any file written to the §13.3 scores contract, so the reranker, NRMS and every ablation
+row are evaluated by one harness.
+
+**Inputs and the label rule.** The scores file plus its manifest name the dataset and split;
+labels are joined **from that split** by `(imp_row, cand_position)` via `split_labels`, never read
+from the file. The join is asserted to be lossless: if it changes the row count, the run stops.
+
+**What it reports**, for the whole split and for every slice:
+
+| Group | Metrics |
+|---|---|
+| Accuracy | AUC, MRR, nDCG@5, nDCG@10 — per impression, each with a bootstrap 95% CI (1,000 resamples, seed 0, blocked per C-026) |
+| Beyond accuracy, over each impression's **top-k** (default k = 10) | intra-list diversity, novelty, catalogue coverage and its Gini (§A1 definitions, `src/eval/beyond_accuracy.py`) |
+
+**Slices (Q5 requires at least two; both are here).** Definitions live in `src/eval/slices.py` and
+keep A1's thresholds so the two assignments stay comparable:
+
+- **cold vs warm** — a user with **≤ 5 history clicks** at *t* is cold. History length comes from
+  the split's own history (EB-NeRD `history.parquet`, MIND `history_ids`), never from the future.
+- **head vs tail** — an article is **head** if it is in the top popularity **quintile** of the
+  *training* clicks; articles with no training click are tail by construction. An impression is
+  head when one of its clicked articles is head. Popularity is therefore defined on training data
+  only; the evaluation split's labels pick which impression is being scored, not what "popular"
+  means.
+
+**Coverage per slice** is recomputed on that slice's own impressions, because coverage is a union
+over recommendations and cannot be averaged from the whole-split number. Diversity and novelty are
+per-impression values, so their slice means are subsets of the same array.
+
+**Verification**
+
+- `tests/test_eval_slices.py` (11 tests) pins the slice definitions: the quintile cut with
+  deterministic tie-breaking and a minimum of one head article, never-clicked articles as tail,
+  and the inclusive cold boundary at 5.
+- The harness re-uses tested code for everything else: `per_impression` / `bootstrap_ci` for the
+  metrics and CIs, `split_labels` for the labels, and A1's `beyond_accuracy` for the trio.
+- Sanity check available on any file: the "all" row's accuracy metrics must reproduce the
+  corresponding row of `RESULTS.md` Q2 (same model, same split).
