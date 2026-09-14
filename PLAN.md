@@ -79,6 +79,7 @@ A1 best leaderboard results, as the reference point: **MIND AUC 0.5714**, **EB-N
 | **P4** Serving & scale (Q4) | Aayush Pandey | index memory, p99 latency, SLA cost model, 10× breakdown |
 | **P5** Extended eval + Codabench (Q5) | **Anurag Kaushal** (C-032, was joint) | diversity/novelty/coverage, cold/warm and head/tail slices, full test-set submission runs on Kaggle, screenshots; Aayush reviews the claims and runs the reranker-vs-NRMS pairing |
 | **P6** Design note + ship (Q6–Q9) | Anurag Kaushal & Aayush Pandey | report, checklist, final push |
+| **Q9** Anti-gaming ablation | **Anurag Kaushal** (C-034) | metrics with and without serving-unavailable features, both datasets, paired CIs; the registry (`UNSAFE_FEATURES`, `ABSENT_FROM_TEST_FILE`) and `config.FINAL` are his |
 
 **The shape of the split (revised).**
 
@@ -128,6 +129,7 @@ new work.
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☑ done 14 Sep (C-030): EB-NeRD +0.0074 AUC, CI > 0 (review pending); MIND null |
 | **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☑ done 14 Sep (C-031): (a) p99 1.7/3.4 ms, (b) 72/87 ms, BM25 breaks first at 10× |
 | **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag** (C-032) | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
+| **Q9** Anti-gaming ablation | Q9 | 17–18 Sep | **Anurag** (C-034) | with/without serving-unavailable features on both datasets, paired CIs, in `RESULTS.md` Q9 | ☐ |
 | **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ☐ |
 
 P4 starts early on A1 outputs (§2). P5 can start at once: the reranker is locked in `config.FINAL`.

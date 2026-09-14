@@ -23,11 +23,11 @@ _Last updated: 2026-09-14 by Anurag (agent: Claude Code)_
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
 | Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | **C-019 review of the EB-NeRD "beats" line is DONE and signed off (C-033)**: all four checks passed — reproduction bit-identical (Δ AUC +0.0074 [+0.0066, +0.0081]), full-split coverage with no truncation, labels independently reconstructed on all 2,928,942 rows, and the row-3 masked control reproduced. `RESULTS.md` Q3.2–3.4 now carries the reviewer line; my record is `data/processed/paired/ebnerd_row2_vs_row1_review_anurag.json` (Aayush's file untouched). Next: **P5 end to end (C-032)** — `config.FINAL` score files, `make eval`, test-set inference, both submissions, screenshots. Also open from P0: Kaggle datasets for the large files (5–6) |
+| Anurag Kaushal | Q3 review signed off (C-033). **Q9 (anti-gaming) is now mine (C-034)**: the feature registry (`UNSAFE_FEATURES`, `ABSENT_FROM_TEST_FILE`, `drop_unsafe`) and `config.FINAL` are mine, so the with/without serving-unavailable-features ablation belongs in the same hands; `PLAN.md` §2/§3 updated. Next: **P5 end to end (C-032)** — `config.FINAL` score files, `make eval`, test-set inference, both submissions, screenshots. Also open from P0: Kaggle datasets for the large files (5–6) |
 | Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
-| Blocked on | Nothing on Aayush's side for Q3: the claim is signed off (C-033). He still needs the reranker's `config.FINAL` scores file before the reranker-vs-NRMS pairing can run — that is Anurag's next step |
-| Next up | **Anurag:** the `config.FINAL` scores files, then `make eval`, then test-set inference + submissions. **Aayush:** P6 — the Q3 and Q4 sections of the note, now that Q3 is verified |
+| Blocked on | Nothing on Aayush's side for Q3 (C-033). He still needs the reranker's `config.FINAL` scores file for the reranker-vs-NRMS pairing. Anurag: Q9 (C-034) is adopted but not started |
+| Next up | **Anurag:** the `config.FINAL` scores files + `make eval`, then test-set inference + submissions, then Q9. **Aayush:** P6 — the Q3 and Q4 sections of the note |
 
 ---
 
@@ -1057,6 +1057,21 @@ Entry format:
   present in its own slate, so no impression has an unrankable click and none is dropped by the
   bootstrap.
 - Affects: `RESULTS.md` Q3.2–3.4, `CONTEXT.md` §1
+- Status: active
+
+### C-034 · Q9 (anti-gaming: with and without serving-unavailable features) is Anurag's
+- Date / author: 2026-09-15 · decision by Anurag Kaushal; logged by Claude Code
+- Decision: **Anurag owns Q9 end to end.** It had no owner: `PLAN.md` folded Q9 into P6 ("Q6–Q9,
+  joint") and `RESULTS.md` Q9 still read `_Not started._` on 15 Sep, five days before the deadline,
+  for a graded, mandatory requirement.
+- Why Anurag: the registry it rests on is his — `SERVING_OK`, `UNSAFE_FEATURES`,
+  `ABSENT_FROM_TEST_FILE` and `model_features` (C-013, C-015), and the reranker whose features get
+  ablated is `config.FINAL` (C-018).
+- Scope: metrics for the locked reranker **with and without** the serving-unavailable features on
+  both datasets, paired CIs, plus the A1 precedent (`next_read_time` moved AUC 0.50 → 0.96) as the
+  cautionary row. `n_prior_clicks_in_session` (`ABSENT_FROM_TEST_FILE`) is a separate row from the
+  `UNSAFE_FEATURES` ones, since it is serving-safe but missing from the Codabench test file.
+- Affects: `PLAN.md` §2 and §3 (P6 row), `RESULTS.md` Q9, this log
 - Status: active
 
 ## 3 · Inherited from A1 (facts, not decisions to revisit)
