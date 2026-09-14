@@ -34,6 +34,7 @@ class Request:
     t: datetime
     candidates: list | None      # framing (a): the impression's list; framing (b): None
     imp_row: int | None          # key into the session store (None -> position 1)
+    history: list | None = None  # MIND: the impression's inline history (the user store otherwise)
 
 
 @dataclass
@@ -44,8 +45,15 @@ class Response:
     timings: dict = field(default_factory=dict)   # seconds per stage
 
 
+def _history(state, req: Request) -> list:
+    """EB-NeRD: last-5 ids from the user store (what `Stage1.add` gets as hist5). MIND: the full
+    inline history (what `Stage1.add` gets as `history_ids`); `history_len` and the user vector
+    use the list as given, the BM25 query its last 5, in both scripts."""
+    return list(req.history) if req.history is not None else state.users.recent(req.user_id)
+
+
 def _query(state, req: Request):
-    hist = state.users.recent(req.user_id)
+    hist = _history(state, req)
     q = build_query(hist, state.stage1.text, n_recent=N_RECENT, lang=_lang(state))
     uv = build_user_vector(hist, state.stage1.ann.id_to_row, state.stage1.ann.matrix, pooling="mean")
     return hist, q, uv
@@ -91,10 +99,17 @@ def _profile_masses(state, req: Request):
 def features_for(state, req: Request, cands: list, *, q, uv, session_pos: int, profile_cache: bool = True) -> list[list[float]]:
     """One row per candidate, columns in `state.features` order — the batch path's definitions."""
     st = state.stage1
-    hist = state.users.recent(req.user_id)
+    hist = _history(state, req)
     log = state.users.log(req.user_id)
     t = req.t
-    pm = _profile_masses(state, req) if profile_cache else None
+    needs_profile = "recency_weighted_profile" in state.features or "category_match" in state.features
+    pm = _profile_masses(state, req) if (profile_cache and needs_profile) else None
+    share = None
+    if "cat_affinity" in state.features:                     # MIND (A1 v4): share of history categories
+        cats = [state.article_cat[a] for a in hist if a in state.article_cat]
+        share, cn = {}, (len(cats) or 1)
+        for c in cats:
+            share[c] = share.get(c, 0) + 1
     bm25 = st.bm.score_candidates(q, cands)
     sem = st.ann.score_candidates(uv, cands)
     n = len(cands)
@@ -119,8 +134,8 @@ def features_for(state, req: Request, cands: list, *, q, uv, session_pos: int, p
             else:
                 vals["recency_weighted_profile"] = recency_weighted_profile(log, req.user_id, cat, t, H_INF, untimed_ts=state.untimed_ts)
                 vals["category_match"] = category_match(log, req.user_id, cat, t, H_INF, untimed_ts=state.untimed_ts)
-        if "cat_affinity" in state.features:
-            vals["cat_affinity"] = state.cat_affinity(req.user_id, cat)
+        if share is not None:
+            vals["cat_affinity"] = share.get(cat, 0) / cn
         rows.append([float(vals[f]) for f in state.features])
     return rows
 
@@ -144,7 +159,9 @@ def serve(state, model, req: Request, *, framing: str = "a", k: int = 100, profi
     tm["retrieve"] = time.perf_counter() - t0
     t1 = time.perf_counter()
     session_pos = state.sessions.position(req.imp_row) if req.imp_row is not None else 1
-    X = np.asarray(features_for(state, req, cands, q=q, uv=uv, session_pos=session_pos, profile_cache=profile_cache), dtype=float).reshape(len(cands), len(state.features))
+    # float32, exactly as src.rerank.common.matrix feeds the model at training time: the MIND
+    # parity test caught 11/8,360 rows flipping at tree thresholds when float64 was fed.
+    X = np.asarray(features_for(state, req, cands, q=q, uv=uv, session_pos=session_pos, profile_cache=profile_cache), dtype=np.float32).reshape(len(cands), len(state.features))
     tm["features"] = time.perf_counter() - t1
     t2 = time.perf_counter()
     scores = predict_scores(model, X) if len(cands) else np.zeros(0)

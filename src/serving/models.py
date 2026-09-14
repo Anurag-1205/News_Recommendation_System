@@ -47,4 +47,28 @@ def _ebnerd(state, force):
 
 
 def _mind(state, force):
-    raise NotImplementedError("MIND: P4 U1b")
+    import joblib
+    from scripts.rerank_mind_a2 import DEV, TRAIN, build
+    from src.rerank.common import SEED, evaluate, group_sizes, fit_final, matrix, per_impression, predict_scores
+    from src.rerank.config import FINAL
+    from src.rerank.mind import first_sightings, load_behaviors, load_categories
+    path = MODELS / "mind_final.joblib"
+    feats = FINAL["mind"]["features"]
+    if path.exists() and not force:
+        return joblib.load(path)
+    t0 = time.perf_counter()
+    train, dev = load_behaviors(TRAIN), load_behaviors(DEV)
+    categories = load_categories([TRAIN, DEV])
+    sightings = first_sightings([train, dev])
+    fit_sample = np.sort(np.random.default_rng(SEED).choice(train.height, size=min(80_000, train.height), replace=False))
+    tr = build(train, TRAIN, fit_sample, categories, sightings, state.stage1)
+    model = fit_final(FINAL["mind"]["objective"], matrix(tr, feats), tr["label"].to_numpy(), group_sizes(tr))
+    fit_s = time.perf_counter() - t0
+    va = build(dev, DEV, np.arange(dev.height), categories, sightings, state.stage1)
+    va = va.with_columns(pl.Series("final", predict_scores(model, matrix(va, feats))))
+    ci = evaluate(per_impression(va, "final"))
+    joblib.dump(model, path)
+    (MODELS / "mind_final.json").write_text(json.dumps({"fit_seconds": round(fit_s), "fit_impressions": 80_000, "eval_impressions": int(dev.height),
+                                                        "auc": ci["auc"].mean, "auc_ci": [ci["auc"].lo, ci["auc"].hi], "features": feats}, indent=2))
+    print(f"FINAL mind fitted in {fit_s:.0f}s; eval AUC {ci}  (RESULTS.md Q2 locked: 0.6747)")
+    return joblib.load(path)

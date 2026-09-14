@@ -72,11 +72,11 @@ def test_parity_with_batch_features_and_scores(ebnerd_state):
     for row in sbeh.sort("imp_row").iter_rows(named=True):
         req = Request(user_id=row["user_id"], t=row["t"], candidates=list(row["candidates"]), imp_row=row["imp_row"])
         ref = batch.filter(pl.col("imp_row") == row["imp_row"]).sort("cand_position")
-        X_ref = ref.select(feats).to_numpy().astype(float)
+        X_ref = ref.select(feats).to_numpy().astype(np.float32)   # the dtype matrix() feeds the model
         for cache in (True, False):          # the served (cached-profile) path and the row-function path
             resp = serve(st, model, req, framing="a", profile_cache=cache)
             assert resp.candidates == ref["article_id"].to_list()
-            np.testing.assert_allclose(resp.X, X_ref, atol=1e-9, equal_nan=True, err_msg=f"{row['imp_row']} cache={cache}")
+            np.testing.assert_array_equal(resp.X, X_ref, err_msg=f"{row['imp_row']} cache={cache}")   # bit-identical, incl. NaN
     # scores: the batch path's predict on the same matrix
     from src.rerank.common import matrix, predict_scores
     ref_scores = predict_scores(model, matrix(batch.sort("imp_row", "cand_position"), feats))
@@ -123,3 +123,37 @@ def test_memory_report_names_every_component(ebnerd_state):
     for k in ("articles", "bm25_index", "ann_index", "counts", "user_store", "session_store"):
         assert k in mem and mem[k]["ram_bytes"] > 0, k
     assert mem["ann_index"]["ram_bytes"] == ebnerd_state.stage1.ann.matrix.nbytes
+
+
+# ---- MIND: the same parity oracle against scripts.rerank_mind_a2.build ------------------------------
+
+needs_mind = pytest.mark.skipif(not (Path("data/processed/mind_minilm.npz").exists()
+                                      and Path("data/interim/mind/MINDsmall_dev/MINDsmall_dev/behaviors.tsv").exists()),
+                                 reason="needs make data and mind_minilm.npz (P4 U0)")
+
+
+@needs_mind
+def test_mind_parity_with_batch_features_and_scores():
+    from scripts.rerank_mind_a2 import DEV, TRAIN, build
+    from src.rerank.common import matrix, predict_scores
+    from src.rerank.config import FINAL
+    from src.rerank.mind import first_sightings, load_behaviors, load_categories
+    from src.serving.models import load_or_fit
+    from src.serving.request import serve
+    from src.serving.state import ServingState
+    st = ServingState.build("mind")
+    train, dev = load_behaviors(TRAIN), load_behaviors(DEV)
+    sample = np.sort(np.random.default_rng(1).choice(dev.height, size=200, replace=False))
+    batch = build(dev, DEV, sample, load_categories([TRAIN, DEV]), first_sightings([train, dev]), st.stage1).sort("imp_row", "cand_position")
+    feats = FINAL["mind"]["features"]
+    model = load_or_fit("mind", st)
+    sbeh = dev.filter(pl.col("imp_row").is_in(sample)).sort("imp_row")
+    got = []
+    for row in sbeh.iter_rows(named=True):
+        req = Request(row["user_id"], row["t"], list(row["candidates"]), row["imp_row"], history=list(row["history_ids"]))
+        resp = serve(st, model, req, framing="a")
+        ref = batch.filter(pl.col("imp_row") == row["imp_row"])
+        assert resp.candidates == ref["article_id"].to_list()
+        np.testing.assert_array_equal(resp.X, ref.select(feats).to_numpy().astype(np.float32), err_msg=str(row["imp_row"]))   # bit-identical, incl. NaN
+        got.append(resp.scores)
+    np.testing.assert_allclose(np.concatenate(got), predict_scores(model, matrix(batch, feats)), atol=1e-9)

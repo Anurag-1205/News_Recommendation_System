@@ -150,7 +150,37 @@ class ServingState:
 
     @classmethod
     def _build_mind(cls) -> "ServingState":
-        raise NotImplementedError("MIND serving state: P4 U1b")
+        """MIND: as `scripts/rerank_mind_a2.py` — BM25 over the small-set news (train + dev), the
+        MiniLM ANN over every id in `mind_minilm.npz`, counts over MINDsmall_train. History is
+        inline per impression in MIND, so the user store is the dev split's per-user snapshot and
+        each request may also carry its own `history` (what the batch path sees)."""
+        from scripts.rerank_mind_a2 import DEV, OUT, TRAIN, Stage1
+        from src.rerank.config import FINAL
+        from src.rerank.mind import ROOT, load_behaviors, split_dir
+        mem, secs = {}, {}
+        gc.collect(); r0 = _rss(); t0 = time.perf_counter()
+        train, dev = load_behaviors(TRAIN), load_behaviors(DEV)
+        gc.collect(); r1 = _rss()
+        st = Stage1([TRAIN, DEV], train)
+        gc.collect(); r2 = _rss()
+        ann_bytes = int(st.ann.matrix.nbytes)
+        news_files = [split_dir(ROOT, n) / "news.tsv" for n in (TRAIN, DEV)]
+        mem["articles"] = {"disk_bytes": _disk(*news_files), "ram_bytes": 1, "n_articles": len(st.text)}
+        mem["ann_index"] = {"disk_bytes": _disk(OUT / "mind_minilm.npz"), "ram_bytes": ann_bytes}
+        mem["bm25_index"] = {"disk_bytes": 0, "ram_bytes": max(r2 - r1 - ann_bytes - _counts_bytes(st.rc), 1), "n_docs": st.bm.index.n_docs}
+        mem["counts"] = {"disk_bytes": _disk(split_dir(ROOT, TRAIN) / "behaviors.tsv"), "ram_bytes": _counts_bytes(st.rc), "n_articles": st.rc.n_articles}
+        secs["stage1"] = time.perf_counter() - t0
+
+        t0 = time.perf_counter(); gc.collect(); r3 = _rss()
+        recent = dict(zip(dev["user_id"].to_list(), [list(h) for h in dev["history_ids"].to_list()]))
+        ustore = UserStore(recent, {})
+        gc.collect(); r4 = _rss()
+        mem["user_store"] = {"disk_bytes": _disk(split_dir(ROOT, DEV) / "behaviors.tsv"), "ram_bytes": max(r4 - r3, 1), "n_users": len(recent)}
+        secs["user_store"] = time.perf_counter() - t0
+        sessions = SessionStore({})                       # no session feature in config.FINAL["mind"]
+        mem["session_store"] = {"disk_bytes": 0, "ram_bytes": 1, "n_impressions": 0}
+        mem["process_rss_after_build"] = {"ram_bytes": _rss()}
+        return cls("mind", st, FINAL["mind"]["features"], dict(st.cat), {}, ustore, sessions, None, mem, secs)
 
 
 def _counts_bytes(rc) -> int:

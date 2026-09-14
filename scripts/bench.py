@@ -64,7 +64,7 @@ def main():
     rec["memory"] = st.memory
     print(f"state built in {rec['build_seconds']['total']:.0f}s; RSS {st.memory['process_rss_after_build']['ram_bytes']/1e9:.2f} GB")
     model = load_or_fit(args.dataset, st)
-    if hasattr(model, "model_file") or type(model).__name__ == "Booster":   # LightGBM: one core at predict time
+    if type(model).__name__ == "Booster":                     # LightGBM: one core at predict time
         import lightgbm as lgb
         model = lgb.Booster(model_file=str(Path("data/processed/models") / f"{args.dataset}_final.txt"), params={"num_threads": 1})
 
@@ -77,7 +77,8 @@ def main():
         val = load_behaviors("MINDsmall_dev")
     rows = np.sort(np.random.default_rng(args.seed).choice(val.height, size=args.n + args.warmup, replace=False))
     sample = val.filter(pl.col("imp_row").is_in(rows)).sort("imp_row")
-    reqs = [Request(r["user_id"], r["t"], list(r["candidates"]), r["imp_row"]) for r in sample.iter_rows(named=True)]
+    reqs = [Request(r["user_id"], r["t"], list(r["candidates"]), r["imp_row"], history=list(r["history_ids"]) if "history_ids" in sample.columns else None)
+            for r in sample.iter_rows(named=True)]
     warm, meas = reqs[:args.warmup], reqs[args.warmup:]
     rec["latency"] = {}
     for label, framing, k, cache in (("a", "a", 0, True), ("b_k100", "b", 100, True), ("b_k200", "b", 200, True),
@@ -100,16 +101,21 @@ def main():
     rec["peak_rss_bytes"] = peak_rss_bytes()
 
     # the batch path on the same impressions (framing (a)), for the overhead comparison
+    from src.rerank.common import matrix, predict_scores
+    from src.rerank.config import FINAL
+    t2 = time.perf_counter()
     if args.dataset == "ebnerd":
         from scripts.rerank_ebnerd_a2 import build
-        from src.rerank.common import matrix, predict_scores
-        from src.rerank.config import FINAL
         from src.rerank.ebnerd import load_articles
-        t2 = time.perf_counter()
         long, _ = build(val, SMALL / "validation/history.parquet", np.array([r.imp_row for r in meas]), load_articles(), st.stage1)
-        predict_scores(model, matrix(long, FINAL["ebnerd"]["features"]))
-        rec["batch_path"] = {"wall_s": time.perf_counter() - t2, "per_request_ms": (time.perf_counter() - t2) / len(meas) * 1000}
-        print(f"batch path: {rec['batch_path']['wall_s']:.1f}s for {len(meas)} impressions = {rec['batch_path']['per_request_ms']:.2f} ms/request")
+    else:
+        from scripts.rerank_mind_a2 import DEV, TRAIN, build
+        from src.rerank.mind import first_sightings, load_categories
+        train = load_behaviors(TRAIN)
+        long = build(val, DEV, np.array([r.imp_row for r in meas]), load_categories([TRAIN, DEV]), first_sightings([train, val]), st.stage1)
+    predict_scores(model, matrix(long, FINAL[args.dataset]["features"]))
+    rec["batch_path"] = {"wall_s": time.perf_counter() - t2, "per_request_ms": (time.perf_counter() - t2) / len(meas) * 1000}
+    print(f"batch path: {rec['batch_path']['wall_s']:.1f}s for {len(meas)} impressions = {rec['batch_path']['per_request_ms']:.2f} ms/request")
 
     # cost at the target QPS, from the shipped framing (a) and the literal Q4.2 framing (b, K=100)
     rec["cost"] = {"price_per_vcpu_hour": args.price, "price_source": args.price_source, "rho": 0.5, "sla_s": 0.1, "rows": []}
