@@ -26,9 +26,12 @@ def pct(xs, p): return float(np.percentile(np.asarray(xs) * 1000.0, p))
 
 def summarise(times: list[dict]) -> dict:
     out = {}
-    for stage in ("retrieve", "features", "score", "total"):
-        xs = [t[stage] for t in times]
-        out[stage] = {"p50_ms": pct(xs, 50), "p95_ms": pct(xs, 95), "p99_ms": pct(xs, 99), "mean_ms": float(np.mean(xs) * 1000)}
+    for stage in ("retrieve", "query", "bm25_search", "ann_search", "features", "score", "total"):
+        xs = [t[stage] for t in times if stage in t]
+        if xs:
+            out[stage] = {"p50_ms": pct(xs, 50), "p95_ms": pct(xs, 95), "p99_ms": pct(xs, 99), "mean_ms": float(np.mean(xs) * 1000)}
+    if any("query_tokens" in t for t in times):
+        out["query_tokens_mean"] = float(np.mean([t["query_tokens"] for t in times if "query_tokens" in t]))
     return out
 
 
@@ -61,8 +64,9 @@ def main():
     rec["memory"] = st.memory
     print(f"state built in {rec['build_seconds']['total']:.0f}s; RSS {st.memory['process_rss_after_build']['ram_bytes']/1e9:.2f} GB")
     model = load_or_fit(args.dataset, st)
-    if hasattr(model, "reset_parameter"):                       # LightGBM Booster: one core
-        model.reset_parameter({"num_threads": 1})
+    if hasattr(model, "model_file") or type(model).__name__ == "Booster":   # LightGBM: one core at predict time
+        import lightgbm as lgb
+        model = lgb.Booster(model_file=str(Path("data/processed/models") / f"{args.dataset}_final.txt"), params={"num_threads": 1})
 
     # requests: seeded sample of validation impressions
     if args.dataset == "ebnerd":
@@ -73,23 +77,25 @@ def main():
         val = load_behaviors("MINDsmall_dev")
     rows = np.sort(np.random.default_rng(args.seed).choice(val.height, size=args.n + args.warmup, replace=False))
     sample = val.filter(pl.col("imp_row").is_in(rows)).sort("imp_row")
-    reqs = [Request(r["user_id"], r["t"], r["candidates"].to_list(), r["imp_row"]) for r in sample.iter_rows(named=True)]
+    reqs = [Request(r["user_id"], r["t"], list(r["candidates"]), r["imp_row"]) for r in sample.iter_rows(named=True)]
     warm, meas = reqs[:args.warmup], reqs[args.warmup:]
     rec["latency"] = {}
-    for label, framing, k in (("a", "a", 0), ("b_k100", "b", 100), ("b_k200", "b", 200)):
+    for label, framing, k, cache in (("a", "a", 0, True), ("b_k100", "b", 100, True), ("b_k200", "b", 200, True),
+                                     ("a_naive", "a", 0, False)):     # naive = profile recomputed per candidate (the first measurement)
         for r in warm:
-            serve(st, model, r, framing=framing, k=k)
+            serve(st, model, r, framing=framing, k=k, profile_cache=cache)
         times, ncand = [], []
         t1 = time.perf_counter()
         for r in meas:
-            resp = serve(st, model, r, framing=framing, k=k)
+            resp = serve(st, model, r, framing=framing, k=k, profile_cache=cache)
             times.append(resp.timings); ncand.append(len(resp.candidates))
         wall = time.perf_counter() - t1
         rec["latency"][label] = {**summarise(times), "n_requests": len(meas), "mean_candidates": float(np.mean(ncand)),
                                  "wall_s": wall, "single_core_qps": len(meas) / wall}
         L = rec["latency"][label]
+        sub = f" (bm25 {L['bm25_search']['p99_ms']:.1f} / ann {L['ann_search']['p99_ms']:.1f}, {L.get('query_tokens_mean', 0):.0f} query tokens)" if "bm25_search" in L else ""
         print(f"{label:7s} total p50 {L['total']['p50_ms']:.1f} p95 {L['total']['p95_ms']:.1f} p99 {L['total']['p99_ms']:.1f} ms | "
-              f"retrieve p99 {L['retrieve']['p99_ms']:.1f} features p99 {L['features']['p99_ms']:.1f} score p99 {L['score']['p99_ms']:.1f} | "
+              f"retrieve p99 {L['retrieve']['p99_ms']:.1f}{sub} features p99 {L['features']['p99_ms']:.1f} score p99 {L['score']['p99_ms']:.1f} | "
               f"{L['mean_candidates']:.0f} cands | {L['single_core_qps']:.1f} req/s on one core")
     rec["peak_rss_bytes"] = peak_rss_bytes()
 

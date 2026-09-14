@@ -71,11 +71,12 @@ def test_parity_with_batch_features_and_scores(ebnerd_state):
     sbeh = val.filter(pl.col("imp_row").is_in(sample))
     for row in sbeh.sort("imp_row").iter_rows(named=True):
         req = Request(user_id=row["user_id"], t=row["t"], candidates=list(row["candidates"]), imp_row=row["imp_row"])
-        resp = serve(st, model, req, framing="a")
         ref = batch.filter(pl.col("imp_row") == row["imp_row"]).sort("cand_position")
-        assert resp.candidates == ref["article_id"].to_list()
         X_ref = ref.select(feats).to_numpy().astype(float)
-        np.testing.assert_allclose(resp.X, X_ref, atol=1e-9, equal_nan=True, err_msg=str(row["imp_row"]))
+        for cache in (True, False):          # the served (cached-profile) path and the row-function path
+            resp = serve(st, model, req, framing="a", profile_cache=cache)
+            assert resp.candidates == ref["article_id"].to_list()
+            np.testing.assert_allclose(resp.X, X_ref, atol=1e-9, equal_nan=True, err_msg=f"{row['imp_row']} cache={cache}")
     # scores: the batch path's predict on the same matrix
     from src.rerank.common import matrix, predict_scores
     ref_scores = predict_scores(model, matrix(batch.sort("imp_row", "cand_position"), feats))
