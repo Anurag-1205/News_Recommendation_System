@@ -127,12 +127,13 @@ class ServingState:
         secs["stage1"] = time.perf_counter() - t0
 
         t0 = time.perf_counter(); gc.collect(); r4 = _rss()
-        users = pl.concat([train_beh["user_id"], val_beh["user_id"]]).unique()
-        log = pl.concat([load_history(SMALL / "train/history.parquet", articles, users),
-                         load_history(SMALL / "validation/history.parquet", articles, users)]).unique(["user_id", "article_id", "ts"])
+        # The split's own history snapshot (EB-NeRD ships one per split): what the system knows
+        # about each user at the start of the served period, and exactly what the batch path
+        # reads for these impressions (`build` -> load_history / recent_history on the same file).
+        log = load_history(SMALL / "validation/history.parquet", articles, val_beh["user_id"])
         ustore = UserStore.from_click_log(log.select("user_id", "ts", "article_id", "category"), N_RECENT)
         del log; gc.collect(); r5 = _rss()
-        mem["user_store"] = {"disk_bytes": _disk(SMALL / "train/history.parquet", SMALL / "validation/history.parquet"),
+        mem["user_store"] = {"disk_bytes": _disk(SMALL / "validation/history.parquet"),
                              "ram_bytes": max(r5 - r4, 1), "n_users": len(ustore.recent_ids)}
         secs["user_store"] = time.perf_counter() - t0
 

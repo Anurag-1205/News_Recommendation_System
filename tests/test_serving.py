@@ -69,8 +69,8 @@ def test_parity_with_batch_features_and_scores(ebnerd_state):
     feats = FINAL["ebnerd"]["features"]
     model = load_or_fit("ebnerd", st)
     sbeh = val.filter(pl.col("imp_row").is_in(sample))
-    for row in sbeh.iter_rows(named=True):
-        req = Request(user_id=row["user_id"], t=row["t"], candidates=row["candidates"].to_list(), imp_row=row["imp_row"])
+    for row in sbeh.sort("imp_row").iter_rows(named=True):
+        req = Request(user_id=row["user_id"], t=row["t"], candidates=list(row["candidates"]), imp_row=row["imp_row"])
         resp = serve(st, model, req, framing="a")
         ref = batch.filter(pl.col("imp_row") == row["imp_row"]).sort("cand_position")
         assert resp.candidates == ref["article_id"].to_list()
@@ -79,7 +79,7 @@ def test_parity_with_batch_features_and_scores(ebnerd_state):
     # scores: the batch path's predict on the same matrix
     from src.rerank.common import matrix, predict_scores
     ref_scores = predict_scores(model, matrix(batch.sort("imp_row", "cand_position"), feats))
-    got = np.concatenate([serve(st, model, Request(r["user_id"], r["t"], r["candidates"].to_list(), r["imp_row"]), framing="a").scores
+    got = np.concatenate([serve(st, model, Request(r["user_id"], r["t"], list(r["candidates"]), r["imp_row"]), framing="a").scores
                           for r in sbeh.sort("imp_row").iter_rows(named=True)])
     np.testing.assert_allclose(got, ref_scores, atol=1e-9)
 
