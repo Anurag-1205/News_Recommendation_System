@@ -791,10 +791,44 @@ under a fixed recipe and 5 epochs, while the reranker consumes A1's stage-1 scor
 point-in-time behavioural features; this is a comparison of *systems as built here*, not a claim
 about the architectures in general.
 
+### Q5.6 · Test-set inference and Codabench submissions — 2026-09-15 (C-038)
+
+Both test files are scored with `config.FINAL` by `scripts/submit_a2.py`, run as a Kaggle CPU
+kernel (`scripts/kaggle/submit_<dataset>/`). The driver fits once through
+`src.serving.models.load_or_fit`, builds each chunk through the **same `build()` the measured runs
+use**, converts scores to ranks with `ranks_from_scores` only, writes chunks atomically so a
+killed session resumes from the first missing one, then validates the assembled file against the
+test file's own ids and slate lengths before zipping.
+
+| dataset | test impressions | candidate rows | chunks | kernel wall time | predictions | zip |
+|---|---|---|---|---|---|---|
+| MIND (`MINDlarge_test`) | 2,370,727 | 93,115,001 | 24 × 100k | 2,993 s (49.9 min) | 291.3 MB | 107.5 MB |
+| EB-NeRD (`ebnerd_testset`) | 13,536,710 | 205,925,868 | 55 × 250k | _running_ | — | — |
+
+**Verification before upload** (`scripts/kaggle/fetch_submission.sh <dataset> <vN>`), all passed
+for MIND: the downloaded zip's sha256 equals the one the kernel printed
+(`9468cea3…82fa1`); the archive holds `predictions.txt` at its root; `validate_file` re-run
+locally over all 2,370,727 lines reports every rank list a valid permutation of 1..N, zero
+duplicate ids, and a line count equal to the test file's impression count. Manifest, chunk ledger
+and kernel log are kept under `data/submissions/_kaggle/<dataset>/<vN>/` and
+`data/logs/kaggle/` (both gitignored); the run has a row in `scripts/kaggle/RUN_LEDGER.md`.
+
+**Cost note (why CPU).** Measured on 20,000 EB-NeRD impressions: feature building is **96.0 %** of
+the time (BM25 postings, polars joins, per-user profile lookups), GBDT scoring **3.9 %**. A perfect
+GPU would therefore remove about 4 % of the run, and neither LightGBM's inference path nor
+sklearn's `HistGradientBoostingClassifier` has a GPU one to begin with. The 2× T4 / fp16 setup
+(C-020) is right for NRMS — dense matmuls — and wrong for a tree ensemble. The lever that mattered
+was `InvertedIndex.avg_doc_length` (commit `b4c4fb7`), 37 % of the runtime before it was cached.
+
 ### Still open in Q5
 
-Test-set inference for `config.FINAL` on both Codabench test files, the two uploads, and the
-screenshots. That is the remaining mandatory item of the brief.
+The EB-NeRD kernel, then the two Codabench uploads and their screenshots. Leaderboard scores go in
+the table below as they come back.
+
+| dataset | competition | submitted | leaderboard score | screenshot |
+|---|---|---|---|---|
+| MIND | [13967](https://www.codabench.org/competitions/13967/) | zip ready 2026-09-15 | _pending_ | _pending_ |
+| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | _pending_ | _pending_ | _pending_ |
 
 ## Q9 · With and without serving-unavailable features — 2026-09-15, Anurag Kaushal (C-034, C-036)
 
