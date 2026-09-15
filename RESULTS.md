@@ -803,15 +803,18 @@ test file's own ids and slate lengths before zipping.
 | dataset | test impressions | candidate rows | chunks | kernel wall time | predictions | zip |
 |---|---|---|---|---|---|---|
 | MIND (`MINDlarge_test`) | 2,370,727 | 93,115,001 | 24 × 100k | 2,993 s (49.9 min) | 291.3 MB | 107.5 MB |
-| EB-NeRD (`ebnerd_testset`) | 13,536,710 | 205,925,868 | 55 × 250k | _running_ | — | — |
+| EB-NeRD (`ebnerd_testset`) | 13,536,710 | 205,925,868 | 55 × 250k | 7,098 s (118.3 min) | 703.1 MB | 229.7 MB |
 
 **Verification before upload** (`scripts/kaggle/fetch_submission.sh <dataset> <vN>`), all passed
-for MIND: the downloaded zip's sha256 equals the one the kernel printed
-(`9468cea3…82fa1`); the archive holds `predictions.txt` at its root; `validate_file` re-run
-locally over all 2,370,727 lines reports every rank list a valid permutation of 1..N, zero
-duplicate ids, and a line count equal to the test file's impression count. Manifest, chunk ledger
-and kernel log are kept under `data/submissions/_kaggle/<dataset>/<vN>/` and
-`data/logs/kaggle/` (both gitignored); the run has a row in `scripts/kaggle/RUN_LEDGER.md`.
+on both: the downloaded zip's sha256 equals the one the kernel printed (MIND `9468cea3…82fa1`,
+EB-NeRD `51f531a5…bf37`); each archive holds `predictions.txt` at its root; and `validate_file`
+re-run locally over every line reports each rank list a valid permutation of 1..N and a line count
+equal to the test file's impression count — MIND 2,370,727 lines / 2,370,727 distinct ids / 0
+duplicates, EB-NeRD 13,536,710 lines / 13,336,711 distinct ids / **199,999 duplicates**, which is
+exactly the 200,000 beyond-accuracy rows sharing `impression_id` 0 (SPEC §6) and is why the
+EB-NeRD check runs with `allow_duplicate_ids=True`. Manifest, chunk ledger and kernel log are kept
+under `data/submissions/_kaggle/<dataset>/<vN>/` and `data/logs/kaggle/` (both gitignored); each
+run has a row in `scripts/kaggle/RUN_LEDGER.md`.
 
 **Cost note (why CPU).** Measured on 20,000 EB-NeRD impressions: feature building is **96.0 %** of
 the time (BM25 postings, polars joins, per-user profile lookups), GBDT scoring **3.9 %**. A perfect
@@ -822,13 +825,12 @@ was `InvertedIndex.avg_doc_length` (commit `b4c4fb7`), 37 % of the runtime befor
 
 ### Still open in Q5
 
-The EB-NeRD kernel, then the two Codabench uploads and their screenshots. Leaderboard scores go in
-the table below as they come back.
+Both zips are built and verified. What remains is the two Codabench uploads and their screenshots.
 
-| dataset | competition | submitted | leaderboard score | screenshot |
+| dataset | competition | zip | leaderboard score | screenshot |
 |---|---|---|---|---|
-| MIND | [13967](https://www.codabench.org/competitions/13967/) | zip ready 2026-09-15 | _pending_ | _pending_ |
-| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | _pending_ | _pending_ | _pending_ |
+| MIND | [13967](https://www.codabench.org/competitions/13967/) | ready 2026-09-15 (107.5 MB) | _pending_ | _pending_ |
+| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | ready 2026-09-15 (229.7 MB) | _pending_ | _pending_ |
 
 ## Q9 · With and without serving-unavailable features — 2026-09-15, Anurag Kaushal (C-034, C-036)
 
