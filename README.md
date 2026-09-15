@@ -52,13 +52,13 @@ make bench         # A2 Q4 — not yet implemented
 
 | Deliverable | State |
 |---|---|
-| **Q1** click-history & session features | not started |
-| **Q2** two-stage reranker | not started (A1 pointwise GBDT is the starting point) |
-| **Q3** baseline reproduced, then beaten | not started |
-| **Q4** serving & scale | not started |
-| **Q5** extended eval + leaderboards | not started |
-| **Q6** design note | not started |
-| **Q9** leakage test + serving-time ablation | A1 tests carried over; A2 features pending |
+| **Q1** click-history & session features | **done** — recency-decayed profile, session, dwell, position, popularity, freshness, category match, each with a leakage test (`RESULTS.md` Q1) |
+| **Q2** two-stage reranker | **done** — locked in `src/rerank/config.FINAL` (C-018): EB-NeRD lambdarank AUC 0.6734, MIND pointwise 0.6747, before/after tables in `RESULTS.md` Q2. D1 framing (b) descoped on measured stage-1 recall (Q2.5, C-037) |
+| **Q3** baseline reproduced, then beaten | **done** — NRMS on both datasets; EB-NeRD + freshness beats NRMS, ΔAUC +0.0074 [+0.0066, +0.0081]; MIND a pre-registered null. Claim independently reviewed (C-033) |
+| **Q4** serving & scale | **done** — memory per component, p99 1.7 ms (EB-NeRD) / 3.4 ms (MIND) served, cost/1k queries, and what breaks at 10× (`RESULTS.md` Q4) |
+| **Q5** extended eval + leaderboards | **metrics + slices done** (`make eval`, `RESULTS.md` Q5); test-set inference running on Kaggle, the two Codabench uploads are the last open item |
+| **Q6** design note | in progress |
+| **Q9** leakage test + serving-time ablation | **done** — with/without serving-unavailable features on both datasets with paired CIs (`RESULTS.md` Q9). On EB-NeRD the unavailable features make the model *worse*, −0.0236 AUC [−0.0245, −0.0227] |
 
 ## Notes
 
