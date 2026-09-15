@@ -16,18 +16,18 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-15 by Anurag (agent: Claude Code)_
+_Last updated: 2026-09-15 10:50 by Anurag (agent: Claude Code)_
 
 | | |
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
-| Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. Open for Q2: D1 framing (b) — note P4 measured framing (b) end to end, so the retrieval path exists |
+| Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. **Q9 done (C-036). D1 framing (b) closed: descoped on measured stage-1 recall (C-037).** |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | **P5 part 1 done (C-035)**: `config.FINAL` scores for both splits, `make eval` (was a stub) with both slices, and the reranker-vs-NRMS pairings — the reranker beats NRMS on both datasets. **Remaining: test-set inference + the two Codabench uploads + screenshots**, plus Q9 (C-034). Earlier today: **hand-over archive installed**: sha256 matches, 27 files under `data/` (gitignored), `read_scores` on the MIND NRMS file returns 2,740,998 rows. **C-019 review of the EB-NeRD "beats" line: reproduction step done, verdict not yet recorded.** `make paired` on Aayush's two score files reproduced his record **bit-identically** (Δ AUC +0.0074 [+0.0066, +0.0081], all four verdicts "beats"); my record: `data/processed/paired/ebnerd_row2_vs_row1_review_anurag.json` (his file untouched). Remaining review checks before sign-off, then `RESULTS.md` Q3.2–3.4 gets the reviewer line. Then **P5 end to end (C-032)**: `config.FINAL` score files, `make eval`, test-set inference, both submissions, screenshots. Also open from P0: Kaggle datasets for the large files (5–6) |
+| Anurag Kaushal | **Today: Q9 done both datasets (C-036), D1 framing (b) closed on measured recall (C-037), both Kaggle inference datasets `ready`.** P5 part 1 done (C-035). **Remaining in P5: the Kaggle inference kernel for `config.FINAL` on both test files → two Codabench uploads → screenshots.** That is the last mandatory item; nothing else of mine is open |
 | Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
-| Blocked on | Nothing on Aayush's side: Q3 signed off (C-033) and the reranker scores now exist, so his reranker-vs-NRMS pairing is done too (C-035). Anurag: the Codabench submissions (the last mandatory Q5 item) and Q9 (C-034, still `_Not started._`) |
-| Next up | **Anurag:** Kaggle datasets for the large files (P0.5–6) → test-set inference for `config.FINAL` on both test files → upload + screenshots; then Q9. Long runs go to Kaggle, not the laptop (C-004). **Aayush:** P6 Q3/Q4 note sections; the Q5 numbers in `RESULTS.md` are ready to review |
+| Blocked on | Nothing on Aayush's side. Anurag: only the Codabench submissions remain |
+| Next up | **Anurag:** write the Kaggle inference kernel (datasets `anuragkaushal183/a2-{ebnerd,mind}-inference`, sha256 in `scripts/kaggle/*_test_dataset/SHA256SUMS`), run MIND first (fast), then EB-NeRD's 13.5M impressions in resumable chunks; upload + screenshots; then P6. **Aayush:** P6 Q3/Q4 note sections; Q5, Q9 and Q2.5 in `RESULTS.md` are ready to review |
 
 ---
 
@@ -1147,8 +1147,53 @@ Entry format:
 - Status: active. **Q9 done on both datasets** (`RESULTS.md` Q9): EB-NeRD — adding the unsafe trio
   costs −0.0236 AUC [−0.0245, −0.0227] and `n_prior_clicks_in_session` −0.0136 [−0.0143, −0.0129],
   every CI below 0, so the honest model is also the better one; MIND has a single row because it
-  builds no unsafe column. The MIND dataset is on Kaggle (`ready`); the EB-NeRD upload's first
-  attempt failed on Kaggle's 20–80-char subtitle rule (mine was 87) and was relaunched.
+  builds no unsafe column. **Both datasets are on Kaggle and `ready`**: `a2-mind-inference` first
+  try; `a2-ebnerd-inference` on the third — the first failed Kaggle's 20–80-char subtitle rule
+  (mine was 87), the second died on a file I had briefly `git stash`ed.
+
+---
+
+### C-037 · D1 framing (b) descoped: stage-1 recall@K is the number, full (b) accuracy metrics are not built
+- Date / author: 2026-09-15 · Anurag Kaushal (Claude Code)
+- Decision: Q2.1's "retrieve a top-K (100–200) from the corpus, then rerank" — PLAN D1 framing
+  (b) — is **descoped per the PLAN.md §4 ladder, item 1**, with a measured reason instead of a
+  bare statement. What ships is framing (a), reranking the impression's own slate, which is what
+  both leaderboards score. Framing (b) keeps everything P4 already built and measured — the
+  served retrieval path (`src/serving/request.retrieve`), its latency, cost and 10× analysis —
+  plus one new number: **stage-1 recall@K** from `scripts/stage1_recall.py`. No framing-(b)
+  AUC/MRR/nDCG row is produced.
+- The number (`RESULTS.md` Q2.5; records `data/processed/stage1_recall/<dataset>.json`; the same
+  1,000-impression seeded sample as `scripts/bench.py`, so recall and latency describe one list):
+  | dataset | hit@100 | hit@200 |
+  |---|---|---|
+  | EB-NeRD | **0.0100** [0.0040, 0.0160] | **0.0140** [0.0070, 0.0220] |
+  | MIND | **0.0210** [0.0130, 0.0310] | **0.0350** [0.0240, 0.0460] |
+  On EB-NeRD the union of BM25 top-100 and ANN top-100 (198 articles on average) contains the
+  clicked article in **1 impression in 100**. A second seed on 300 impressions gave 0/300. At
+  K = 5,000 (a 9,654-article union, 7.7 % of the corpus) the first sampled impression's click
+  was still absent.
+- Why it happens, measured, not guessed: the clicked article is a **median 4 hours old** at click
+  time; what BM25 ∪ ANN returns is a median **3,024 hours** (~4 months) old. Retrieval overlaps
+  the impression's own slate on 0.2 % of its articles. Every clicked id *is* in the index
+  (302/302 checked), so this is ranking, not coverage: similarity to the last five reads pulls
+  the most content-similar articles from the whole archive, and news readers click what is new.
+  The publisher's slate is itself a freshness-filtered candidate set; reproducing it from the
+  corpus needs a time-windowed index (candidates published in the last *N* hours, then rank), not
+  a similarity index over 125k articles. That is a different stage 1 from A1's, which is the one
+  the brief tells us to reuse.
+- Why descope rather than build the time window: (i) a reranker cannot rank what stage 1 does not
+  return, so any framing-(b) accuracy metric on the current generators is bounded above by ~1 %
+  hit rate and would be a number about the retriever, not the reranker; (ii) labels exist only
+  for the slate, so a retrieved list of unlabelled articles would give an AUC that is neither
+  comparable with (a) nor meaningful; (iii) the deadline is five days out with the submissions
+  and the note still open, and the descope is the ladder's first, sanctioned cut. The finding is
+  reported in the note as the answer to "why not retrieve-then-rerank": on this data it fails at
+  stage 1, before the reranker is reached.
+- Alternatives rejected: a full framing-(b) metric row (see (i)–(ii)); silently omitting (b)
+  (PLAN §4 says "state it", and the recall number makes the statement evidence).
+- Affects: `scripts/stage1_recall.py` (new), `RESULTS.md` Q2.5 (new subsection), `PLAN.md` P2 row
+  and §4 ladder item 1 (marked taken), `CONTEXT.md` §1 (the "Open for Q2" note closes)
+- Status: active. Closes the open item carried since C-018.
 
 ---
 

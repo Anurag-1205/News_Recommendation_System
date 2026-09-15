@@ -830,3 +830,72 @@ human-written code. Both team members append here. Chat exports are submitted wi
     with slice size); Gini is the comparable concentration number. Said so in RESULTS.
   - The reranker-vs-NRMS verdict is reported as a comparison of **the systems as built here**, not
     of the architectures.
+
+### 2026-09-15 · Anurag Kaushal · Claude Code (Opus 5) · Kaggle inference datasets, Q9 anti-gaming, D1 framing (b) recall + descope
+
+- Asked (two prompts, run back to back): "Commit Phase 5 (Part 1) … Start Kaggle Dataset Uploads
+  (P0.5-6): then start remaining Q9 anti-gaming work … Execute the necessary scripts to build the
+  private dataset for MINDlarge and ebnerd_large on my Kaggle account. DO not wait for running
+  process. … What is status for Q2.1 / D1 framing (b)? compare build a row vs descope it." Then:
+  "Execute Q2.1 Recommendation: I agree with your proposal for D1 framing (b). Calculate the
+  Stage-1 recall@K (for K=100 and K=200) for both datasets using our existing retrieval path. We
+  will use this single, high-value metric to satisfy the brief and formally trigger the descoping
+  of full (b) accuracy metrics per PLAN.md §4. Process Q9 Results: … extract the metrics. Halt and
+  Document: Report the Stage-1 Recall numbers and the Q9 Anti-Gaming metrics directly in the chat.
+  Update CONTEXT.md to record the D1 framing (b) descope decision based on our recall findings.
+  Append this prompt and your execution summary to AI_USAGE.md under Anurag."
+- Tool: Claude Code (Opus 5). Long jobs detached with `nohup` and watched with log monitors, per
+  the standing instruction not to block on running processes.
+- Outcome:
+  1. **Kaggle datasets** (C-036). `scripts/kaggle/upload_inference_data.sh <ebnerd|mind>` builds one
+     stored zip per dataset containing *only* the files `src/rerank/{ebnerd,mind}.py` open, with
+     member paths equal to the `data/interim/` relative paths so a kernel needs no path rewriting.
+     `anuragkaushal183/a2-mind-inference` (1.65 GB) is `ready`; `a2-ebnerd-inference` (1.97 GB)
+     is `ready` after two failed attempts (below). sha256 of every member is committed beside each metadata file.
+  2. **Q9** (`scripts/ablation_q9.py`, `RESULTS.md` Q9). Against `config.FINAL` itself, three rows,
+     everything but the feature set held fixed. EB-NeRD: adding the unsafe trio gives
+     **−0.0236 AUC** [−0.0245, −0.0227] and `n_prior_clicks_in_session` **−0.0136** [−0.0143,
+     −0.0129], every CI below 0 on all four metrics — the forbidden features make the listwise
+     model *worse*, so the honest model is the better one. MIND: one row (AUC 0.6747 = Q2) because
+     it builds no unsafe column; the script says so instead of manufacturing a comparison.
+  3. **D1 framing (b)** (`scripts/stage1_recall.py`, `RESULTS.md` Q2.5, C-037). Stage-1 recall@K
+     through the *served* retrieval path on `bench.py`'s 1,000-impression sample:
+     EB-NeRD hit@100 **0.0100** [0.0040, 0.0160], hit@200 **0.0140** [0.0070, 0.0220];
+     MIND hit@100 **0.0210 [0.0130, 0.0310]**, hit@200 **0.0350 [0.0240, 0.0460]**. The click is in the retrieved union
+     about once in 50–100 impressions. Framing (b) is descoped per PLAN §4 item 1 with this as
+     the stated reason; no framing-(b) accuracy row is built.
+- Verified by:
+  1. Q9's `serving_safe` row reproduces `make eval`'s all-row AUC 0.6734 (EB-NeRD) and Q2's 0.6747
+     (MIND) exactly — two independent harnesses agree on the shipped model.
+  2. Recall is not a coverage artefact: all 302 clicked ids in a 300-impression check are in the
+     ANN index; a second seed gave 0/300 at K=100; at K=5,000 (9,654-article union) the first
+     impression's click was still absent. Cause measured: clicked articles are a median **4 h**
+     old at click time, retrieved ones a median **3,024 h**; retrieval overlaps the real slate on
+     0.2 % of its articles. Content similarity over the archive is the wrong stage 1 for news.
+  3. Every dataset member's sha256 recorded; the MIND dataset's Kaggle status polled `ready`.
+- Failed / corrected:
+  - **`paired_delta(a, b)` is `mean(b − a)`.** My first Q9 draft passed the variant first, which
+    would have flipped the sign of every delta. Caught reading the signature before the run;
+    baseline is now the first argument with a comment saying why.
+  - **Kaggle rejected the EB-NeRD dataset**: "Subtitle length must be between 20 and 80
+    characters" (mine was 87). Fixed to 66 and relaunched, serialised after MIND so the two
+    ~2 GB transfers did not share the uplink.
+  - The relaunch fired while the upload script was inside a `git stash` and died on "No such
+    file". Restored the stash, relaunched again. My oversight: a background job depended on an
+    untracked file I had stashed.
+  - The first EB-NeRD subtitle also went out before I knew the rule existed; both metadata files
+    now stay under 80.
+- Judgement calls flagged for review:
+  - **Q9 is measured against `config.FINAL`, not the A1-era `ablation_serving_time.py`**, which
+    probes the raw BM25 pipeline; Q9 asks about the model that ships.
+  - **`n_prior_clicks_in_session` is its own row**, not folded into "unsafe": it is serving-safe
+    in a real system and excluded for a different reason (absent from the test file).
+  - **Framing (b) reports recall, not AUC.** Labels exist only for the slate, so an AUC over a
+    retrieved list of unlabelled articles would be neither comparable with (a) nor meaningful.
+  - The datasets exclude `entity_embedding.vec` / `relation_embedding.vec` (~140 MB): the reranker
+    never opens them. If a later kernel needs them, that is a new dataset version, not a rewrite.
+- AI-generated vs hand-written: `scripts/ablation_q9.py`, `scripts/stage1_recall.py`,
+  `scripts/kaggle/upload_inference_data.sh`, both `dataset-metadata.json`, the RESULTS Q9/Q2.5
+  text and CONTEXT C-036/C-037 drafted by the agent from the run outputs; the decisions
+  (descope (b); Q9 against `config.FINAL`; three-row design) and the diagnosis to run were
+  Anurag's; reviewed line by line before staging.

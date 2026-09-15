@@ -348,6 +348,53 @@ model):
 - no label column, and no click count on EB-NeRD;
 - every prediction is finite.
 
+### Q2.5 · Retrieve-then-rerank (D1 framing (b)): stage-1 recall@K, and why it is descoped — 2026-09-15 (C-037)
+
+Q2.1 says the reranker sits on a top-K (100–200) *retrieved from the corpus*. The model above
+re-ranks the impression's own slate (framing (a)), because that is what both leaderboards score.
+The retrieval path exists and was served and timed in Q4 (`src/serving/request.retrieve`: BM25
+top-K over the last-5-click query ∪ flat-ANN top-K over the mean-pooled user vector). This
+subsection measures the one number that decides whether a reranker on that list could work at
+all — **how often the clicked article is in the retrieved top-K** — on the same 1,000-impression
+seeded validation sample Q4 timed, so recall and latency describe one and the same list.
+
+Command (records in `data/processed/stage1_recall/<dataset>.json`):
+
+```
+PYTHONPATH=. .venv/bin/python -u scripts/stage1_recall.py --dataset ebnerd --n 1000 --seed 0
+PYTHONPATH=. .venv/bin/python -u scripts/stage1_recall.py --dataset mind   --n 1000 --seed 0
+```
+
+hit@K = 1 if any clicked article is in the union; 95% CI by blocked bootstrap over impressions.
+
+| dataset | K | union size (mean) | hit@K | Q4 p99 latency for this list |
+|---|---|---|---|---|
+| EB-NeRD | 100 | 198.0 | **0.0100** [0.0040, 0.0160] | 72.0 ms |
+| EB-NeRD | 200 | 395.2 | **0.0140** [0.0070, 0.0220] | — |
+| MIND | 100 | 189.3 | **0.0210 [0.0130, 0.0310]** | 86.5 ms |
+| MIND | 200 | 378.3 | **0.0350 [0.0240, 0.0460]** | — |
+
+**Reading.** On EB-NeRD the clicked article is inside the 198-article union **once in 100
+impressions**; doubling K to a 395-article union lifts that to 1.4 in 100. A second seed on 300
+impressions gave 0/300, and at K = 5,000 (a 9,654-article union, 7.7 % of the corpus) the first
+sampled impression's click was still absent.
+
+**Why, measured.** Every clicked id is in the index (302/302 checked), so this is ranking, not
+coverage. The clicked article is a **median 4 hours old** at click time; the articles BM25 ∪ ANN
+returns are a median **3,024 hours** (about four months) old, and retrieval overlaps the actual
+slate on 0.2 % of its articles. Similarity to the user's last five reads pulls the most
+content-similar articles out of a 125k-article archive, and news readers click what is new. The
+publisher's slate is already a freshness-filtered candidate set; rebuilding it from the corpus
+needs a time-windowed candidate generator (articles published in the last *N* hours, then rank),
+which is a different stage 1 from A1's, and A1's is what the brief tells us to reuse.
+
+**Decision (C-037, PLAN.md §4 ladder item 1).** Framing (b) is descoped with this number as the
+reason. No framing-(b) AUC/MRR/nDCG row is built: a reranker cannot rank what stage 1 does not
+return, so any such row is bounded above by the ~1 % hit rate and would measure the retriever, not
+the reranker — and the labels exist only for the slate, so the number would be neither comparable
+with (a) nor meaningful. What ships is framing (a); what the note reports for (b) is its latency
+and cost (Q4), its 10× behaviour (Q4.4), and this recall ceiling.
+
 ## Q3 · Baseline reproduced, then beaten
 
 **Every Kaggle run — successes and failures, with commit, mode, metrics, timings and log path — is

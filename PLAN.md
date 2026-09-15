@@ -74,7 +74,7 @@ A1 best leaderboard results, as the reference point: **MIND AUC 0.5714**, **EB-N
 |---|---|---|
 | **P0** Setup | Anurag Kaushal & Aayush Pandey | clean-clone check (`make env && make test` on Aayush's machine); Kaggle verification on both accounts |
 | **P1** Behavioural features (Q1) | Anurag Kaushal | **done** (C-006 – C-014) |
-| **P2** Two-stage reranker (Q2) | Anurag Kaushal | **locked** (C-018): `src/rerank/config.FINAL`. Open: D1 framing (b), retrieving a top-K from the corpus as Q2.1 asks |
+| **P2** Two-stage reranker (Q2) | Anurag Kaushal | **locked** (C-018): `src/rerank/config.FINAL`. D1 framing (b) descoped with a measured reason (C-037, RESULTS Q2.5) |
 | **P3** Baseline + improvement (Q3): P3.1, P3.4a, P3.2–3.4 | **Aayush Pandey** | NRMS reproduction on Kaggle (2× T4, fp16) on both datasets; the paired bootstrap CI harness; the one principled change and its ablation |
 | **P4** Serving & scale (Q4) | Aayush Pandey | index memory, p99 latency, SLA cost model, 10× breakdown |
 | **P5** Extended eval + Codabench (Q5) | **Anurag Kaushal** (C-032, was joint) | diversity/novelty/coverage, cold/warm and head/tail slices, full test-set submission runs on Kaggle, screenshots; Aayush reviews the claims and runs the reranker-vs-NRMS pairing |
@@ -123,7 +123,7 @@ new work.
 |---|---|---|---|---|---|
 | **P0** Setup | Part 0 | 11 Sep | Anurag & Aayush | branch + docs; `make test` green on Aayush's clean clone; Kaggle CLI + 2× T4 verified on both accounts; team registered on both Codabench comps; NRMS runs on toy data | ☐ |
 | **P1** Behavioural features | Q1 | 12–13 Sep | Anurag | features in `src/features/`; leakage test covers each one | ☑ done 11 Sep |
-| **P2** Two-stage reranker | Q2 | 13–15 Sep | Anurag | before/after-rerank table, both datasets, with CIs | ☑ locked 11 Sep (C-018); D1 framing (b) open |
+| **P2** Two-stage reranker | Q2 | 13–15 Sep | Anurag | before/after-rerank table, both datasets, with CIs | ☑ locked 11 Sep (C-018); D1 framing (b) closed 15 Sep (C-037): descoped on measured stage-1 recall (hit@100 = 1–2 %) |
 | **P3.1** Reproduce NRMS | Q3.1 | 12–15 Sep | **Aayush** | NRMS on both datasets (Kaggle, float32 — C-022); our number vs the published one; score files written | ☑ done 14 Sep (C-025) |
 | **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☑ done 14 Sep (C-026): adopted + moved; `make paired` |
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☑ done 14 Sep (C-030): EB-NeRD +0.0074 AUC, CI > 0 (review pending); MIND null |
@@ -285,7 +285,7 @@ with the ablation and CIs; serving and scale findings; where it breaks at 10×.
 
 ## 4. Descope ladder: cut in this order if behind (decide end of **Wed 16 Sep**)
 
-1. Drop the retrieved-top-K framing in D1 and keep impression-candidate reranking only (state it).
+1. ~~Drop the retrieved-top-K framing in D1 and keep impression-candidate reranking only (state it).~~ **Taken 15 Sep (C-037)** — stated with the measured stage-1 recall (RESULTS Q2.5), not as a bare cut.
 2. Drop the MIND session proxy; session features on EB-NeRD only.
 3. Reproduce NRMS on EB-NeRD only if it will not run on MIND in time, and state why.
 4. Keep the cost model to one hardware assumption.
