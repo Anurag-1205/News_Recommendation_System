@@ -899,3 +899,64 @@ human-written code. Both team members append here. Chat exports are submitted wi
   text and CONTEXT C-036/C-037 drafted by the agent from the run outputs; the decisions
   (descope (b); Q9 against `config.FINAL`; three-row design) and the diagnosis to run were
   Anurag's; reviewed line by line before staging.
+
+### 2026-09-15 · Anurag Kaushal · Claude Code (Opus 5) · P5 submissions: resumable driver, Kaggle kernels, BM25 fix
+- Asked: "Let's move directly into the final P5 task: Kaggle Inference and Codabench Submissions.
+  Write the Inference Kernel: Create the Kaggle kernel to score both test files using our
+  config.FINAL model. Ensure it uses the existing Codabench submission writer and processes data in
+  resumable chunks (crucial for EB-NeRD's 13.5M rows). Run MIND First: Execute the kernel on the
+  MIND dataset first. It is smaller and will validate that our end-to-end pipeline and submission
+  writer work perfectly before we burn Kaggle quota on EB-NeRD. Run EB-NeRD: Once MIND completes
+  successfully, launch the EB-NeRD inference. Halt and Document: Tell me as soon as the output .zip
+  files are generated so I can manually upload them to Codabench and capture the screenshots.
+  Update CONTEXT.md with the current Kaggle run status and append this exact prompt and your
+  actions to AI_USAGE.md under Anurag."
+- Tool: Claude Code (Opus 5).
+- Actions, in order:
+  1. Read the existing pieces before writing anything: the P4 CPU kernel as the template,
+     `src/eval/submission.py` (`ranks_from_scores`, `validate_file` with `allow_duplicate_ids`
+     for EB-NeRD's 200,000 `impression_id 0` rows, `zip_submission`), both reranker scripts'
+     `--smoke-test-file` paths (they already build the unlabelled test file through `build()`),
+     and `src/serving/models.load_or_fit` (fits `config.FINAL` once and re-checks it against Q2).
+  2. Sized the EB-NeRD file: **13,536,710 impressions, 206M candidate rows** — 13,336,710 accuracy
+     rows (mean slate 11.7) plus the last 200,000 beyond-accuracy rows at 250 candidates each.
+  3. Wrote `scripts/submit_a2.py` (C-038): fit once, chunk by `imp_row`, measured `build()` per
+     chunk, ranks via `ranks_from_scores` only, atomic chunk files, skip-if-exists resume, then
+     assemble + `validate_file` + zip. Per-chunk assertions: no label column, finite scores, every
+     impression present in order, `cand_position` = 1..N, score count = slate length.
+  4. Smoke-tested locally before touching quota: MIND 2,500 impressions / 3 chunks end to end;
+     resume by deleting a chunk and rerunning — `predictions.txt` **byte-identical**; EB-NeRD
+     3,000-row head; and a 200-row chunk from the beyond-accuracy tail (250-slates,
+     `impression_id` 0) — validates with `duplicate_rows` 199, 250-permutations.
+  5. Estimated EB-NeRD at **22.7 h** laptop-equivalent from the smoke's 5 ms/impression — not
+     one Kaggle session. Profiled instead of accepting it (below).
+  6. Wrote `scripts/kaggle/submit_{mind,ebnerd}/`: one script, `DATASET` the only differing line;
+     sha256-verifies every mounted file against the committed `SHA256SUMS` before scoring;
+     symlinks mounts into loader paths; restores previous chunk output; publishes zip + manifest.
+     Unit-tested the mount-root discovery on a fake `/kaggle/input` tree, including the
+     ambiguous-basename case (`behaviors.parquet` at two depths).
+  7. Created a third dataset `a2-stage1-assets` (word2vec parquet + MiniLM npz) because Aayush's
+     `a2-assets-p4` kernel output is private to his account.
+- What worked: reusing the measured `build()` and `load_or_fit` meant zero new feature code; the
+  writer's EB-NeRD special case was already there and tested.
+- Failed / corrected:
+  - **The 22.7 h estimate was mostly a bug.** cProfile on 10k impressions: 37 % of the time in
+    `InvertedIndex.avg_doc_length`, a `@property` summing 125,541 lengths per access, read by BM25
+    once per impression. Fixed as a running total in `add()` (commit `b4c4fb7`). Proof it changes
+    nothing: the 3,000-impression smoke re-run is byte-identical; `test_bm25` + serving parity
+    pass (50 tests). Throughput 1.4 → **0.32 ms/impression**; EB-NeRD now ≈ 1.5 h.
+  - First `mount_root_for` matched on basename, which would have been ambiguous for EB-NeRD;
+    changed to match the full relative path and assert exactly one hit.
+  - A throwaway test fixture failed on `mkdir` without `exist_ok`; fixture only, not the kernel.
+  - **Kaggle cannot access Aayush's private kernel from my account** — discovered by trying
+    `kernels status`; resolved with the third dataset rather than a cross-account dependency.
+- Not done in this block: neither kernel has run yet. **They clone the repo from GitHub, so the
+  eight local commits must be pushed first** — recorded as the blocker in `CONTEXT.md` §1.
+- Judgement calls flagged for review:
+  - CPU kernels, not GPU: GBDT scoring has nothing for a T4 to do, and it saves the weekly quota.
+  - The kernels verify hashes *before* scoring, so a bad mount fails in seconds, not after 1.5 h.
+  - The BM25 fix touches A1 code on the A2 branch; it is arithmetically identical by construction
+    and proven so by the byte-identical smoke — but it is the one change here outside P5's scope.
+- AI-generated vs hand-written: `scripts/submit_a2.py`, both kernel scripts and metadata, the
+  assets dataset metadata, the `index.py` patch and this entry drafted by the agent; the profile
+  → fix decision and the run order (MIND first) were Anurag's instructions; reviewed before staging.

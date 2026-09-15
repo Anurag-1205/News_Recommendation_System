@@ -16,18 +16,18 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-15 10:50 by Anurag (agent: Claude Code)_
+_Last updated: 2026-09-15 11:20 by Anurag (agent: Claude Code)_
 
 | | |
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
 | Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. **Q9 done (C-036). D1 framing (b) closed: descoped on measured stage-1 recall (C-037).** |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | **Today: Q9 done both datasets (C-036), D1 framing (b) closed on measured recall (C-037), both Kaggle inference datasets `ready`.** P5 part 1 done (C-035). **Remaining in P5: the Kaggle inference kernel for `config.FINAL` on both test files → two Codabench uploads → screenshots.** That is the last mandatory item; nothing else of mine is open |
+| Anurag Kaushal | **P5 submissions in flight (C-038).** Driver + both kernels written and smoke-tested locally (resume + beyond-accuracy tail proven). Third dataset `a2-stage1-assets` uploading. **Kaggle run status: MIND kernel not yet pushed — waiting on the push of 8 local commits to origin (the kernel clones the repo), then `kaggle kernels push -p scripts/kaggle/submit_mind`; EB-NeRD after MIND validates.** BM25 `avg_doc_length` fix (`b4c4fb7`) cut the EB-NeRD estimate from ~23 h to ~1.5 h |
 | Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
-| Blocked on | Nothing on Aayush's side. Anurag: only the Codabench submissions remain |
-| Next up | **Anurag:** write the Kaggle inference kernel (datasets `anuragkaushal183/a2-{ebnerd,mind}-inference`, sha256 in `scripts/kaggle/*_test_dataset/SHA256SUMS`), run MIND first (fast), then EB-NeRD's 13.5M impressions in resumable chunks; upload + screenshots; then P6. **Aayush:** P6 Q3/Q4 note sections; Q5, Q9 and Q2.5 in `RESULTS.md` are ready to review |
+| Blocked on | **Anurag → the push.** The kernels clone `a2-click-logs` from GitHub, so `scripts/submit_a2.py` and the BM25 fix must be on origin before either kernel can run. Aayush: nothing |
+| Next up | **Anurag:** push → push MIND kernel → check its log + zip → push EB-NeRD kernel → download both zips → Codabench uploads + screenshots → RESULTS Q5 leaderboard lines. **Aayush:** P6 Q3/Q4 note sections; Q5, Q9, Q2.5 in `RESULTS.md` ready to review |
 
 ---
 
@@ -1194,6 +1194,50 @@ Entry format:
 - Affects: `scripts/stage1_recall.py` (new), `RESULTS.md` Q2.5 (new subsection), `PLAN.md` P2 row
   and §4 ladder item 1 (marked taken), `CONTEXT.md` §1 (the "Open for Q2" note closes)
 - Status: active. Closes the open item carried since C-018.
+
+---
+
+### C-038 · P5 submissions: resumable driver, two Kaggle kernels, a third dataset, and a BM25 fix found on the way
+- Date / author: 2026-09-15 · Anurag Kaushal (Claude Code)
+- Decision, **the driver**: `scripts/submit_a2.py` scores a test file with `config.FINAL` in chunks
+  of `imp_row` (EB-NeRD 250k, MIND 100k). It fits once through `src.serving.models.load_or_fit`
+  (which re-checks the fit against Q2's AUC), builds every chunk through the *measured* `build()`
+  of the reranker scripts (nothing re-implemented), converts scores to ranks with
+  `ranks_from_scores` only, writes each chunk atomically (`.part` → rename), skips chunks whose
+  file exists, then assembles, runs `validate_file` against the test file's own ids and slate
+  lengths, and zips at the archive root. A killed run relaunched with the same arguments
+  continues from the first missing chunk — the A1 EB-NeRD lesson (§3), now a property of the
+  code, not a hope.
+- Decision, **the kernels**: `scripts/kaggle/submit_{mind,ebnerd}/`, one script, `DATASET` the
+  only differing line, CPU only (GBDT scoring; no GPU quota spent). Each kernel clones the repo
+  at `a2-click-logs`, **verifies every mounted input against the sha256 committed in
+  `scripts/kaggle/*/SHA256SUMS` before scoring** (a silently wrong mount is the one failure that
+  yields a valid-looking zip that scores like noise), symlinks the mounts into the loader paths,
+  restores any previous version's `out/chunks/`, runs the driver, and publishes predictions,
+  zip, chunks and manifest under `out/`.
+- Decision, **a third dataset** `anuragkaushal183/a2-stage1-assets`: the two embedding files
+  `ServingState.build` reads — `ebnerd/document_vector.parquet` (official word2vec, 153 MB) and
+  `mind/mind_minilm.npz` (179 MB, the file P4's `a2-assets-p4` produced). Aayush's kernel output
+  is private to his account and unreachable from mine, and both files are local, so one small
+  dataset removes the cross-account dependency.
+- **Found while sizing the run:** the first EB-NeRD estimate was **22.7 h** laptop-equivalent —
+  two 12-h Kaggle sessions. Profiling 10k impressions put **37 % of the time in
+  `InvertedIndex.avg_doc_length`**, a `@property` that summed all 125,541 document lengths on
+  every access, and BM25 reads it once per scored impression. A1 code, invisible at 1,000-request
+  benchmarks, dominant at 13.5M. Fixed as a running total maintained by `add()` (commit
+  `b4c4fb7`): the 3,000-impression smoke output is **byte-identical**, `test_bm25` and the
+  serving parity test pass, and throughput went **1.4 → 0.32 ms/impression**. New estimate:
+  ~1.2 h for the 13.34M accuracy rows plus the beyond-accuracy tail — one session.
+- Verified locally before any quota was spent: MIND 2,500 impressions in 3 chunks end to end;
+  resume (chunk deleted, rerun) reproduces `predictions.txt` byte-identically; EB-NeRD 3,000-row
+  head; and a 200-row chunk from the **beyond-accuracy tail** (rows 13,336,710+, 250-article
+  slates, `impression_id` 0) scores, validates (`duplicate_rows` 199) and yields 250-permutations.
+- Run order: MIND first (small; validates the end-to-end path and the writer), then EB-NeRD.
+- Alternatives rejected: a GPU kernel (nothing here uses one); scoring on the laptop (C-004);
+  relying on Aayush's kernel output as a `kernel_sources` entry (private, cross-account).
+- Affects: `scripts/submit_a2.py` (new), `scripts/kaggle/submit_{mind,ebnerd}/` (new),
+  `scripts/kaggle/assets_dataset/` (new), `src/lexical/index.py` (`_total_length`)
+- Status: active. **Run status is in §1.**
 
 ---
 
