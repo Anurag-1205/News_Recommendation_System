@@ -1,0 +1,7 @@
+{
+  "title": "Stage-1 embedding assets for A2 test inference",
+  "id": "anuragkaushal183/a2-stage1-assets",
+  "licenses": [{"name": "other"}],
+  "subtitle": "EB-NeRD word2vec document vectors and MIND MiniLM vectors for the reranker",
+  "description": "Private dataset for CS4.406 A2 (CONTEXT.md C-038). The two stage-1 embedding files src/serving/state.ServingState.build reads: ebnerd/document_vector.parquet (the official Ekstra_Bladet_word2vec artefact, 125,541 x 300, unmodified) and mind/mind_minilm.npz (all-MiniLM-L6-v2 384-d L2-normalised vectors over every MIND article, produced by scripts/encode_mind_minilm.py; the same file Aayush's a2-assets-p4 kernel produced for P4). sha256 in scripts/kaggle/assets_dataset/SHA256SUMS."
+}

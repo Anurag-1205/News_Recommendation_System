@@ -1,0 +1,15 @@
+{
+  "id": "anuragkaushal183/a2-submit-ebnerd",
+  "title": "a2-submit-ebnerd",
+  "code_file": "submit_kernel.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["anuragkaushal183/a2-ebnerd-inference", "anuragkaushal183/a2-stage1-assets"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
