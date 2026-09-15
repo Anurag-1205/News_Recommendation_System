@@ -1,0 +1,11 @@
+{
+  "title": "EB-NeRD reranker inputs for A2 test inference",
+  "id": "anuragkaushal183/a2-ebnerd-inference",
+  "licenses": [
+    {
+      "name": "other"
+    }
+  ],
+  "subtitle": "ebnerd_small and ebnerd_testset parquets the locked reranker reads",
+  "description": "Private dataset for CS4.406 A2 (CONTEXT.md C-036). Exactly the parquet files src/rerank/ebnerd.py opens for test-set inference with src/rerank/config.FINAL: ebnerd_small/{train,validation}/{behaviors,history}.parquet (stage-1 indexes and the fit sample) and ebnerd_testset/{articles.parquet,test/{behaviors,history}.parquet}. __MACOSX and .DS_Store are excluded; no entity/relation embeddings, which the reranker never reads. sha256 of each member is in scripts/kaggle/ebnerd_test_dataset/SHA256SUMS in the repo."
+}

@@ -1,0 +1,7 @@
+{
+  "title": "MIND reranker inputs for A2 test inference",
+  "id": "anuragkaushal183/a2-mind-inference",
+  "licenses": [{"name": "other"}],
+  "subtitle": "MINDsmall train+dev and MINDlarge_test behaviors/news the locked reranker reads",
+  "description": "Private dataset for CS4.406 A2 (CONTEXT.md C-036). Exactly the TSVs src/rerank/mind.py opens for test-set inference with src/rerank/config.FINAL: MINDsmall_train, MINDsmall_dev and MINDlarge_test, each reduced to behaviors.tsv + news.tsv. entity_embedding.vec and relation_embedding.vec are excluded (the reranker never reads them), as are .DS_Store entries. sha256 of each member is in scripts/kaggle/mind_test_dataset/SHA256SUMS in the repo."
+}
