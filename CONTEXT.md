@@ -1107,6 +1107,51 @@ Entry format:
 
 ---
 
+### C-036 · Kaggle inference datasets for the test splits; Q9 measured against `config.FINAL`
+- Date / author: 2026-09-15 · Anurag Kaushal (Claude Code)
+- Decision, **the datasets**: the test-set inference inputs go to Kaggle as two private datasets on
+  **Anurag's account** (`anuragkaushal183`), one zip each, built by
+  `scripts/kaggle/upload_inference_data.sh <ebnerd|mind>`:
+  - `anuragkaushal183/a2-ebnerd-inference` — `ebnerd_small/{train,validation}/{behaviors,history}.parquet`,
+    `ebnerd_small/articles.parquet`, and `ebnerd_testset/ebnerd_testset/{articles.parquet,test/{behaviors,history}.parquet}`. 1.97 GB.
+  - `anuragkaushal183/a2-mind-inference` — `MINDsmall_train`, `MINDsmall_dev` and `MINDlarge_test`,
+    each reduced to `behaviors.tsv` + `news.tsv`.
+  **Member paths inside each zip are exactly the relative paths `src/rerank/{ebnerd,mind}.py` open
+  under `data/interim/`**, so a kernel unzips the mount and the existing code reads it with no path
+  rewriting. Only the files that are actually read are shipped: no `entity_embedding.vec` or
+  `relation_embedding.vec` (the reranker never opens them, ~140 MB saved), no `__MACOSX`, no
+  `.DS_Store`. `zip -0` (store), because parquet is already compressed and the TSVs are ~1.5 GB.
+  The sha256 of every member is committed in `scripts/kaggle/{ebnerd,mind}_test_dataset/SHA256SUMS`,
+  so the mount can be verified against this machine before inference trusts it.
+- Why: P0 step 5 for the test splits, and the prerequisite for the last mandatory Q5 item. The
+  EB-NeRD test pass is 13.5M impressions, which C-004 puts on Kaggle, not the 7 GB laptop.
+- Decision, **Q9**: `scripts/ablation_q9.py` measures the anti-gaming ablation against
+  `config.FINAL` itself rather than the A1-era `scripts/ablation_serving_time.py`, which probes the
+  raw BM25 pipeline and predates the reranker. Three rows per dataset, everything else held fixed
+  (same seeded fit sample, objective, split and seed — only the feature set moves):
+  `serving_safe` = `config.FINAL` exactly (what ships); `plus_unsafe` = + every `UNSAFE_FEATURES`
+  column the dataset builds (`session_len`, `cur_read_time`, `cur_scroll_percentage`);
+  `plus_absent` = + `n_prior_clicks_in_session` as its own row, per the Q9 brief — it is
+  serving-*safe* but absent from the Codabench test file. **MIND builds no serving-unsafe column at
+  all** (no session, dwell or read-time data), so it has one row by construction and the script says
+  so rather than inventing a comparison.
+- Why this shape: the shipped model is already the honest one, so the useful Q9 number is what a
+  dishonest model *would* have scored — the inflation the registry prevents, not a loss we took.
+- Alternatives rejected: uploading the raw zips (the kernel would re-extract 3.5 GB and the
+  `__MACOSX`/`.vec` dead weight with it); reusing `ablation_serving_time.py` (wrong pipeline, and it
+  would not answer Q9 for the model that ships).
+- Caught in review before running: `paired_delta(a, b)` is `mean(b - a)`, so passing the variant
+  first would have flipped the sign of every Q9 delta. Baseline is now the first argument.
+- Affects: `scripts/kaggle/upload_inference_data.sh` (new), `scripts/kaggle/{ebnerd,mind}_test_dataset/`
+  (new), `scripts/ablation_q9.py` (new), `RESULTS.md` Q9
+- Status: active. **Q9 done on both datasets** (`RESULTS.md` Q9): EB-NeRD — adding the unsafe trio
+  costs −0.0236 AUC [−0.0245, −0.0227] and `n_prior_clicks_in_session` −0.0136 [−0.0143, −0.0129],
+  every CI below 0, so the honest model is also the better one; MIND has a single row because it
+  builds no unsafe column. The MIND dataset is on Kaggle (`ready`); the EB-NeRD upload's first
+  attempt failed on Kaggle's 20–80-char subtitle rule (mine was 87) and was relaunched.
+
+---
+
 ## 3 · Inherited from A1 (facts, not decisions to revisit)
 
 Sources: `SPEC.md` and `git show be15ee6:RESULTS.md`.

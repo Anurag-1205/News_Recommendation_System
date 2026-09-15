@@ -129,7 +129,7 @@ new work.
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☑ done 14 Sep (C-030): EB-NeRD +0.0074 AUC, CI > 0 (review pending); MIND null |
 | **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☑ done 14 Sep (C-031): (a) p99 1.7/3.4 ms, (b) 72/87 ms, BM25 breaks first at 10× |
 | **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag** (C-032) | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
-| **Q9** Anti-gaming ablation | Q9 | 17–18 Sep | **Anurag** (C-034) | with/without serving-unavailable features on both datasets, paired CIs, in `RESULTS.md` Q9 | ☐ |
+| **Q9** Anti-gaming ablation | Q9 | 17–18 Sep | **Anurag** (C-034) | with/without serving-unavailable features on both datasets, paired CIs, in `RESULTS.md` Q9 | ☑ done 15 Sep (C-036): EB-NeRD — adding the unsafe features *hurts* (−0.024 AUC, CI < 0); MIND builds none |
 | **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ☐ |
 
 P4 starts early on A1 outputs (§2). P5 can start at once: the reranker is locked in `config.FINAL`.

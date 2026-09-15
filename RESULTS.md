@@ -749,6 +749,73 @@ about the architectures in general.
 Test-set inference for `config.FINAL` on both Codabench test files, the two uploads, and the
 screenshots. That is the remaining mandatory item of the brief.
 
-## Q9 · With and without serving-unavailable features
+## Q9 · With and without serving-unavailable features — 2026-09-15, Anurag Kaushal (C-034, C-036)
 
-_Not started._
+Command (one per dataset; records in `data/processed/q9/<dataset>.json`):
+
+```
+PYTHONPATH=. .venv/bin/python -u scripts/ablation_q9.py --dataset ebnerd
+PYTHONPATH=. .venv/bin/python -u scripts/ablation_q9.py --dataset mind
+```
+
+**What is measured.** `config.FINAL` is already the serving-honest model: it contains no member of
+`UNSAFE_FEATURES`, and `model_features(for_submission=True)` also drops `ABSENT_FROM_TEST_FILE`
+(SPEC §11.4). So the "without" row is the model that ships, and the ablation adds the forbidden
+features back to see what a model that ignored the registry would have scored. Everything else is
+held fixed — the same seeded fit sample (EB-NeRD 100,000 train-week impressions, MIND 80,000), the
+same objective, the same evaluation split (every impression, not a sample) and the same seed —
+so the delta is attributable to the feature set alone. Paired bootstrap over per-impression
+metrics, 1,000 resamples, seed 0.
+
+Rows:
+
+- **serving_safe** — `config.FINAL` exactly (EB-NeRD 11 features, MIND 7). What ships.
+- **plus_unsafe** — + every `UNSAFE_FEATURES` column the dataset builds: `session_len` (counts the
+  session's impressions *after* *t*), `cur_read_time` and `cur_scroll_percentage` (describe a page
+  view that outlasts the moment of serving). A live system cannot know any of them at request time.
+- **plus_absent** — + `n_prior_clicks_in_session`, reported as its own row per the brief. It is
+  serving-*safe* (a live service knows its own session's clicks) but it is built from
+  `article_ids_clicked`, which the Codabench test file does not ship, so a model trained on it would
+  meet a missing column at test time (the A1 submission-3 failure, SPEC §7).
+
+### Q9.1 · EB-NeRD (`ebnerd_small/validation`, all 244,647 impressions, lambdarank)
+
+| row | features | AUC | MRR | nDCG@5 | nDCG@10 |
+|---|---|---|---|---|---|
+| **serving_safe** (ships) | 11 | **0.6734** [0.6723, 0.6746] | **0.4376** [0.4362, 0.4388] | **0.4985** [0.4971, 0.4999] | **0.5509** [0.5497, 0.5520] |
+| plus_unsafe | 14 | 0.6498 [0.6488, 0.6511] | 0.4119 [0.4106, 0.4132] | 0.4695 [0.4682, 0.4709] | 0.5295 [0.5284, 0.5306] |
+| plus_absent | 12 | 0.6598 [0.6587, 0.6610] | 0.4219 [0.4206, 0.4232] | 0.4815 [0.4802, 0.4828] | 0.5383 [0.5372, 0.5394] |
+
+Paired deltas against serving_safe (95% CI; every interval excludes 0):
+
+| Δ row − serving_safe | AUC | MRR | nDCG@5 | nDCG@10 |
+|---|---|---|---|---|
+| plus_unsafe | **−0.0236** [−0.0245, −0.0227] | −0.0257 [−0.0266, −0.0247] | −0.0290 [−0.0300, −0.0280] | −0.0214 [−0.0222, −0.0206] |
+| plus_absent | **−0.0136** [−0.0143, −0.0129] | −0.0157 [−0.0166, −0.0148] | −0.0170 [−0.0179, −0.0162] | −0.0126 [−0.0133, −0.0119] |
+
+**Reading.** The usual Q9 story is that a serving-unavailable feature inflates the offline number
+and the honest model looks worse. Here it is the reverse: **adding the forbidden features makes the
+listwise model significantly worse on all four metrics**, by 0.024 AUC for the unsafe trio and
+0.014 for `n_prior_clicks_in_session`. This matches the Phase 2 finding that the dwell family hurt
+lambdarank (C-018): these columns are strong at the *impression* level (a long read time says the
+user is engaged) but nearly constant *within* an impression, so a pairwise-loss model that only
+sees within-list differences gets noise from them. Being serving-honest costs nothing on EB-NeRD;
+it is the better model as well as the only deployable one. The serving_safe row reproduces Q5's
+all-row AUC 0.6734 exactly, which cross-checks `scripts/ablation_q9.py` against `make eval`.
+
+### Q9.2 · MIND (`MINDsmall_dev`, all 73,152 impressions, pointwise HistGBDT)
+
+| row | features | AUC | MRR | nDCG@5 | nDCG@10 |
+|---|---|---|---|---|---|
+| **serving_safe** (ships) | 7 | **0.6747** [0.6725, 0.6768] | **0.3295** [0.3272, 0.3321] | **0.3630** [0.3603, 0.3657] | **0.4217** [0.4193, 0.4243] |
+
+**MIND has no serving-unavailable feature to add.** It ships no session, dwell, read-time or
+scroll columns (SPEC §11.5), so every column the registry marks unsafe is absent by construction,
+and `n_prior_clicks_in_session` cannot exist without sessions. The script reports the single row
+and says so rather than manufacturing a comparison. The row reproduces Q2's 0.6747 exactly.
+
+### Q9.3 · What the leaderboard sees
+
+Both submissions score the test file with `config.FINAL`, i.e. the serving_safe row. No number in
+this report was produced with a feature the test file lacks or a live system could not have; the
+two other rows exist only to be disclosed here.
