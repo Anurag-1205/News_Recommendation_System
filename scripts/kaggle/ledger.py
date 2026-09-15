@@ -74,8 +74,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("slug"); ap.add_argument("tag"); ap.add_argument("--note", default="")
     ap.add_argument("--no-fetch", action="store_true", help="use the already-saved log")
-    ap.add_argument("--account", default="main", choices=["main", "alt"],
-                    help="which Kaggle account ran it: main = aayushpandey18602, alt = ~/.kaggle/alt (C-027)")
+    ap.add_argument("--account", default="main", choices=["main", "alt", "anurag"],
+                    help="which Kaggle account ran it: main = aayushpandey18602, alt = ~/.kaggle/alt (C-027), "
+                         "anurag = ~/.kaggle/kaggle.json on Anurag's machine (P5 submissions, C-038)")
     a = ap.parse_args()
     LOGS.mkdir(parents=True, exist_ok=True)
     import os
@@ -84,6 +85,8 @@ def main():
     if a.account == "alt":
         env["KAGGLE_CONFIG_DIR"] = os.path.expanduser("~/.kaggle/alt")
         user = json.load(open(os.path.expanduser("~/.kaggle/alt/kaggle.json")))["username"]
+    elif a.account == "anurag":
+        user = json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]
     log = LOGS / (f"{a.slug}_{a.tag}.log" if a.account == "main" else f"{a.slug}_{a.tag}_{user}.log")
     if not a.no_fetch:
         raw = subprocess.run([str(ROOT / ".venv/bin/kaggle"), "kernels", "logs", f"{user}/{a.slug}"], capture_output=True, text=True, env=env).stdout
