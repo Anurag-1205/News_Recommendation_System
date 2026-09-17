@@ -24,10 +24,10 @@ _Last updated: 2026-09-17 by Aayush (agent: Claude Code)_
 | Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. **Q9 done (C-036). D1 framing (b) closed: descoped on measured stage-1 recall (C-037).** |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
 | Anurag Kaushal | Unavailable from 17 Sep; P5's remainder is Aayush's (C-039). Earlier: **P5 submissions in flight (C-038).** Driver + both kernels written and smoke-tested locally (resume + beyond-accuracy tail proven). Third dataset `a2-stage1-assets` uploading. **Kaggle run status: MIND kernel not yet pushed — waiting on the push of 8 local commits to origin (the kernel clones the repo), then `kaggle kernels push -p scripts/kaggle/submit_mind`; EB-NeRD after MIND validates.** BM25 `avg_doc_length` fix (`b4c4fb7`) cut the EB-NeRD estimate from ~23 h to ~1.5 h |
-| Aayush Pandey | **P3, P4 done; P5 remainder inherited 17 Sep (C-039):** both submission zips verified locally; MIND repackaged with the right member name. **Now:** upload `mind_reranker_final_v2.zip` → 13967 and `ebnerd_reranker_final.zip` → 2469, screenshots, RESULTS Q5.6 lines; review Anurag's Q5 claims (C-035); then P6 |
+| Aayush Pandey | **P6 drafted (C-040): `make note` → 6 pages; fill leaderboard scores + screenshots + `<roll>`.** P3, P4 done; P5 remainder inherited 17 Sep (C-039): both submission zips verified locally; MIND repackaged with the right member name. **Now:** upload `mind_reranker_final_v2.zip` → 13967 and `ebnerd_reranker_final.zip` → 2469, screenshots, RESULTS Q5.6 lines; review Anurag's Q5 claims (C-035); then P6 |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
 | Blocked on | **Anurag → the push.** The kernels clone `a2-click-logs` from GitHub, so `scripts/submit_a2.py` and the BM25 fix must be on origin before either kernel can run. Aayush: nothing |
-| Next up | **Anurag:** push → push MIND kernel → check its log + zip → push EB-NeRD kernel → download both zips → Codabench uploads + screenshots → RESULTS Q5 leaderboard lines. **Aayush:** P6 Q3/Q4 note sections; Q5, Q9, Q2.5 in `RESULTS.md` ready to review |
+| Next up | **Aayush:** Codabench uploads (MIND v2 zip, EB-NeRD zip) → screenshots into `report/` → leaderboard lines in RESULTS Q5.6 and the note → `make note` → change the sudo password, export chats for Q7.4 → final commit. **Anurag (if back):** read his sections of the note. Code freeze Sat 19 18:00 |
 
 ---
 
@@ -1257,6 +1257,28 @@ Entry format:
   RESULTS Q5.6. Which account uploads is whichever is approved and available (C-023 named Anurag's;
   Aayush is now submitting himself).
 - Affects: `scripts/submit_a2.py`, `tests/test_submission_format.py`, `RESULTS.md` Q5.6
+- Status: active
+
+### C-040 · P6: the design note is drafted and builds to 6 pages; the ship checklist state
+- Date / author: 2026-09-17 · Aayush Pandey (Claude Code); Anurag unavailable, so Aayush drafted
+  all sections (P6 was joint) from Anurag's own RESULTS/CONTEXT entries for Q1, Q2, Q5, Q9.
+- Built: `report/design_note.md` (tracked) → `scripts/make_note.py` → `report/design_note.pdf`
+  via markdown-it + headless Chrome, CSS `@page` A4 with 1-inch margins and 11 pt body
+  (no pandoc/LaTeX on this machine); `make note` prints the page count. First build: **6 pages**,
+  3,765 words including tables and the two uncounted appendices. Sections: what we built; design
+  choices and alternatives; results (Q2, Q3.1, Q3.2–3.4 with the pre-registration, reranker vs
+  NRMS, Q5 slices, the Q9 row, leaderboards); serving and scale; where it breaks at 10×; what the
+  process caught; Appendix A reproduce, B references. Every number is copied from RESULTS.md.
+- Open in the note: the two leaderboard scores and screenshots (`report/leaderboard_{mind,ebnerd}.png`,
+  gitignored, embedded by the build) — filled when the Codabench uploads score; Aayush's roll
+  number (`<roll>` placeholder in the note and README); Anurag's read of his sections if he is
+  back before Sat 19.
+- Ship checklist (PLAN.md): history clean (no blob > 5 MB, no `*.zip/*.pt/*.ckpt/data/__pycache__`
+  tracked); README reproduce block now matches the Makefile; fresh-clone `make env && make test`
+  run on Aayush's machine (result recorded in RESULTS.md when it finishes); chat exports for both
+  members are a manual step — **Aayush must change the sudo password that appears in the 12 Sep
+  transcript before exporting**.
+- Affects: `report/design_note.md`, `scripts/make_note.py`, `Makefile` (`note`), `README.md`
 - Status: active
 
 ---

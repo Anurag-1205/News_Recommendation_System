@@ -128,9 +128,9 @@ new work.
 | **P3.4a** Paired bootstrap harness | Q3.4 | 12–14 Sep | **Aayush** | oracle test passes: a constructed Δ is recovered, and a zero-Δ CI covers 0 (replaces or adopts the provisional `src/rerank/common.paired_delta`, C-015) | ☑ done 14 Sep (C-026): adopted + moved; `make paired` |
 | **P3.2–3.4** Improve + ablate | Q3.2–3.4 | 15–17 Sep | **Aayush** | paired 95% CI excludes zero, or an honest null; each claim reviewed by Anurag | ☑ done 14 Sep (C-030): EB-NeRD +0.0074 AUC, CI > 0 (review pending); MIND null |
 | **P4** Serving & scale | Q4 | 14–17 Sep | Aayush | `make bench`: memory, p99, cost/1k queries, 10× argument | ☑ done 14 Sep (C-031): (a) p99 1.7/3.4 ms, (b) 72/87 ms, BM25 breaks first at 10× |
-| **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag** (C-032) | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ☐ |
+| **P5** Extended eval + submit | Q5 | 13–18 Sep | **Anurag** (C-032), remainder Aayush (C-039) | `make eval`; 2 slices; first submission 16 Sep; final submissions + screenshots 18 Sep | ◐ metrics, slices, both test files scored + validated (C-035–C-038); uploads in progress 17 Sep |
 | **Q9** Anti-gaming ablation | Q9 | 17–18 Sep | **Anurag** (C-034) | with/without serving-unavailable features on both datasets, paired CIs, in `RESULTS.md` Q9 | ☑ done 15 Sep (C-036): EB-NeRD — adding the unsafe features *hurts* (−0.024 AUC, CI < 0); MIND builds none |
-| **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ☐ |
+| **P6** Design note + ship | Q6–Q9 | 18–19 Sep | Anurag & Aayush | ~6-page PDF; README reproduce verified from a clean clone | ◐ drafted 17 Sep (C-040): 6 pages; leaderboard lines + screenshots pending |
 
 P4 starts early on A1 outputs (§2). P5 can start at once: the reranker is locked in `config.FINAL`.
 

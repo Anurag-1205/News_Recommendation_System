@@ -960,3 +960,23 @@ human-written code. Both team members append here. Chat exports are submitted wi
 - AI-generated vs hand-written: `scripts/submit_a2.py`, both kernel scripts and metadata, the
   assets dataset metadata, the `index.py` patch and this entry drafted by the agent; the profile
   → fix decision and the run order (MIND first) were Anurag's instructions; reviewed before staging.
+
+### 2026-09-17 · Aayush Pandey · Claude Code (Opus 5) · P5 remainder (MIND archive fix) and P6 draft
+- Asked: "read the plan, context and everything… tell me what part of P5 is done and what is
+  left"; the Codabench failure log (`FileNotFoundError: prediction.txt`); "is there anything
+  pending for the whole project?"; "yes" (open the P6 plan).
+- Produced (AI-generated, reviewed by Aayush): the P5 inventory from Anurag's C-033–C-038 and his
+  `_kaggle.zip` (extracted to `data/submissions/_kaggle/`, both zip hashes verified against
+  RESULTS Q5.6); the MIND archive rebuilt with member `prediction.txt` from identical bytes,
+  `scripts/submit_a2.py` fixed per SPEC §6, a test pinning the per-competition name, C-039;
+  `report/design_note.md` + `scripts/make_note.py` + `make note` (6 pages), C-040; README
+  reproduce block and status; the fresh-clone check.
+- Verified by: sha256 of both submission zips = RESULTS; `unzip -l` of the rebuilt archive;
+  `make test` 376 passed; `make note` page count and A4/1-inch/11 pt measured from the PDF
+  (MediaBox, embedded Liberation Serif, rendered page inspected); every note number greps back
+  to RESULTS.md.
+- Failed / corrected: Anurag's driver wrote `predictions.txt` for both competitions although
+  SPEC §6 already recorded that MIND wants the singular; the failure surfaced only at upload.
+  Not caught by any test until now — the new test would have. The note's first draft came out
+  at exactly 6 pages, so no trimming pass was needed; A1's note in the same format was 2,866 words.
+- Departure from CLAUDE.md §3: the agent commits and pushes (standing instruction, memory).
