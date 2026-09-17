@@ -159,3 +159,16 @@ class TestDuplicateIdPolicy:
         p = self._write(tmp_path, ["0 [1,2]", "0 [1,1]"])
         with pytest.raises(ValueError, match="permutation"):
             validate_file(p, allow_duplicate_ids=True)
+
+
+def test_archive_member_name_per_competition(tmp_path):
+    """SPEC §6: MIND's scorer opens `prediction.txt`, EB-NeRD's `predictions.txt`. The first MIND
+    upload of A2 (17 Sep) failed with FileNotFoundError on exactly this; the driver now picks the
+    name by dataset. This pins the rule so a renamed file cannot ship again."""
+    import zipfile
+    from src.eval.submission import zip_submission
+    for dataset, name in (("mind", "prediction.txt"), ("ebnerd", "predictions.txt")):
+        txt = tmp_path / dataset / name
+        txt.parent.mkdir(); txt.write_text("1 [1]\n")
+        z = zip_submission(txt, tmp_path / f"{dataset}.zip")
+        assert zipfile.ZipFile(z).namelist() == [name]

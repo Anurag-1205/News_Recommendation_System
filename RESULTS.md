@@ -829,8 +829,17 @@ Both zips are built and verified. What remains is the two Codabench uploads and 
 
 | dataset | competition | zip | leaderboard score | screenshot |
 |---|---|---|---|---|
-| MIND | [13967](https://www.codabench.org/competitions/13967/) | ready 2026-09-15 (107.5 MB) | _pending_ | _pending_ |
-| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | ready 2026-09-15 (229.7 MB) | _pending_ | _pending_ |
+| MIND | [13967](https://www.codabench.org/competitions/13967/) | **`mind_reranker_final_v2.zip`** (107.5 MB, sha256 `7a2ad763…4983`), member `prediction.txt` | _pending_ | _pending_ |
+| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | `ebnerd_reranker_final.zip` (229.7 MB, sha256 `51f531a5…3bf37`), member `predictions.txt` | _pending_ | _pending_ |
+
+**Upload 1 (MIND, 17 Sep, Aayush) — FAILED, packaging not scoring.** Codabench's scorer opens
+`/app/input/res/prediction.txt`; the archive built on the 15th held `predictions.txt` (plural).
+SPEC §6 already records that the two competitions differ — MIND `prediction.txt`, EB-NeRD
+`predictions.txt`, the names A1's accepted submissions used — and the A2 driver used the plural
+for both. The MIND archive was rebuilt from the **same** `predictions.txt` bytes (291,329,312 B,
+identical to A1's accepted MIND file size) with the member renamed, through the tested
+`zip_submission`; no re-scoring. The EB-NeRD archive is correct as built. The driver now picks the
+name per dataset and `tests/test_submission_format.py` pins the rule (C-039).
 
 ## Q9 · With and without serving-unavailable features — 2026-09-15, Anurag Kaushal (C-034, C-036)
 

@@ -16,15 +16,15 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-15 11:20 by Anurag (agent: Claude Code)_
+_Last updated: 2026-09-17 by Aayush (agent: Claude Code)_
 
 | | |
 |---|---|
 | Branch | `a2-click-logs`; origin tracks every commit (the agent commits and pushes on Aayush's instruction; no force-push) |
 | Phase | **P1, P2 done/locked (Anurag). P3 done (C-025–C-030); the EB-NeRD "beats" line is REVIEWED AND VERIFIED (C-033), so Aayush is unblocked. P4 done (C-031).** P5, P6 open. **Q9 done (C-036). D1 framing (b) closed: descoped on measured stage-1 recall (C-037).** |
 | Team | Per C-019/C-027/C-032. Anurag: **P5 alone**, reviews Q3 "beats". Aayush: P6 joint, reviews Q5 claims. Kaggle: Anurag's account for P5 inference; Aayush main `aayushpandey18602` (17.8 h left) and alt `aayushpandey602` (27.6 h left) |
-| Anurag Kaushal | **P5 submissions in flight (C-038).** Driver + both kernels written and smoke-tested locally (resume + beyond-accuracy tail proven). Third dataset `a2-stage1-assets` uploading. **Kaggle run status: MIND kernel not yet pushed — waiting on the push of 8 local commits to origin (the kernel clones the repo), then `kaggle kernels push -p scripts/kaggle/submit_mind`; EB-NeRD after MIND validates.** BM25 `avg_doc_length` fix (`b4c4fb7`) cut the EB-NeRD estimate from ~23 h to ~1.5 h |
-| Aayush Pandey | **P3 and P4 done.** P5 handed to Anurag (C-032); hand-over archive sent. Next: P6 — the Q3 and Q4 sections of the note; the reranker-vs-NRMS `make paired` when Anurag's score files arrive; review of his Q5 claims; ship-checklist items on this machine |
+| Anurag Kaushal | Unavailable from 17 Sep; P5's remainder is Aayush's (C-039). Earlier: **P5 submissions in flight (C-038).** Driver + both kernels written and smoke-tested locally (resume + beyond-accuracy tail proven). Third dataset `a2-stage1-assets` uploading. **Kaggle run status: MIND kernel not yet pushed — waiting on the push of 8 local commits to origin (the kernel clones the repo), then `kaggle kernels push -p scripts/kaggle/submit_mind`; EB-NeRD after MIND validates.** BM25 `avg_doc_length` fix (`b4c4fb7`) cut the EB-NeRD estimate from ~23 h to ~1.5 h |
+| Aayush Pandey | **P3, P4 done; P5 remainder inherited 17 Sep (C-039):** both submission zips verified locally; MIND repackaged with the right member name. **Now:** upload `mind_reranker_final_v2.zip` → 13967 and `ebnerd_reranker_final.zip` → 2469, screenshots, RESULTS Q5.6 lines; review Anurag's Q5 claims (C-035); then P6 |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
 | Blocked on | **Anurag → the push.** The kernels clone `a2-click-logs` from GitHub, so `scripts/submit_a2.py` and the BM25 fix must be on origin before either kernel can run. Aayush: nothing |
 | Next up | **Anurag:** push → push MIND kernel → check its log + zip → push EB-NeRD kernel → download both zips → Codabench uploads + screenshots → RESULTS Q5 leaderboard lines. **Aayush:** P6 Q3/Q4 note sections; Q5, Q9, Q2.5 in `RESULTS.md` ready to review |
@@ -1238,6 +1238,26 @@ Entry format:
 - Affects: `scripts/submit_a2.py` (new), `scripts/kaggle/submit_{mind,ebnerd}/` (new),
   `scripts/kaggle/assets_dataset/` (new), `src/lexical/index.py` (`_total_length`)
 - Status: active. **Run status is in §1.**
+
+### C-039 · P5 back to Aayush for the uploads; the MIND archive's member name was wrong (`predictions.txt` → `prediction.txt`)
+- Date / author: 2026-09-17 · Aayush Pandey (Claude Code). Anurag handed P5's remainder back
+  (he is unavailable); his `data/submissions/_kaggle/` tree arrived as `_kaggle.zip` (2.3 GB) and
+  was extracted in place; both zips' sha256 match RESULTS Q5.6 (MIND `9468cea3…`, EB-NeRD `51f531a5…`).
+- Finding: Aayush's first MIND upload failed in the scorer with
+  `FileNotFoundError: /app/input/res/prediction.txt`. SPEC §6 records the two competitions'
+  different member names (MIND singular, EB-NeRD plural — A1's accepted submissions), but
+  `scripts/submit_a2.py` wrote `predictions.txt` for both. EB-NeRD's archive is therefore right;
+  MIND's was not.
+- Fix: MIND archive rebuilt from the identical bytes with the member renamed
+  (`mind_reranker_final_v2.zip`, sha256 `7a2ad763700f9a90582654d5f5de50d116a0bb00e900263560cccb8024ad4983`);
+  the driver chooses the name by dataset; a test pins the rule. No inference was rerun and no
+  score changed.
+- Remaining in P5 (Aayush): upload `mind_reranker_final_v2.zip` to 13967 and
+  `ebnerd_reranker_final.zip` to 2469, screenshots into `report/`, then the two leaderboard lines in
+  RESULTS Q5.6. Which account uploads is whichever is approved and available (C-023 named Anurag's;
+  Aayush is now submitting himself).
+- Affects: `scripts/submit_a2.py`, `tests/test_submission_format.py`, `RESULTS.md` Q5.6
+- Status: active
 
 ---
 

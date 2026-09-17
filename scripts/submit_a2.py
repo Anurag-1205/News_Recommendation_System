@@ -22,7 +22,7 @@ more than three hours and was killed once, so nothing here restarts from zero.
    repeated `impression_id 0` beyond-accuracy rows, MIND does not), and the .txt is zipped at the
    archive root, which is what Codabench expects.
 
-Output: `<out>/<dataset>/predictions.txt`, `<out>/<dataset>/<dataset>_reranker_final.zip`, and a
+Output: `<out>/<dataset>/prediction.txt` (MIND) or `predictions.txt` (EB-NeRD — SPEC §6), `<out>/<dataset>/<dataset>_reranker_final.zip`, and a
 `manifest.json` with counts, chunking, model, features, commit and command.
 """
 from __future__ import annotations
@@ -163,7 +163,10 @@ def main() -> None:
     log(f"chunks: {done} scored now, {skipped} already present")
 
     # ---- assemble, validate, zip ----
-    pred = out / "predictions.txt"
+    # SPEC §6: the two competitions want different names — MIND `prediction.txt`, EB-NeRD
+    # `predictions.txt`. The first MIND upload (17 Sep) failed on exactly this: the scorer opens
+    # /app/input/res/prediction.txt. A1's accepted submissions used these names.
+    pred = out / ("prediction.txt" if args.dataset == "mind" else "predictions.txt")
     with open(pred, "w") as w:
         for i in range(n_chunks):
             with open(chunks_dir / f"chunk_{i:05d}.txt") as r:
