@@ -1,4 +1,4 @@
-.PHONY: help env fetch-small fetch-testset fetch-large fetch-mind data check-data test paired eval bench clean-pyc
+.PHONY: help env fetch-small fetch-testset fetch-large fetch-mind data check-data test paired eval bench note clean-pyc
 .DEFAULT_GOAL := help
 
 VENV := .venv
@@ -48,6 +48,9 @@ eval: env  ## Q5: extended metrics + slices for a scores file: make eval SCORES=
 bench: env  ## Q4 serving benchmark on ONE core: make bench DATASET=ebnerd|mind (memory, p50/p95/p99, cost)
 	@test -n "$(DATASET)" || (echo "usage: make bench DATASET=ebnerd|mind"; exit 2)
 	PYTHONPATH=. taskset -c 0 $(PY) scripts/bench.py --dataset $(DATASET) $(BENCH_ARGS)
+
+note: env  ## Q6 design note: report/design_note.md -> report/design_note.pdf (11 pt, 1-inch margins; prints the page count)
+	PYTHONPATH=. $(PY) scripts/make_note.py
 
 clean-pyc:
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +
