@@ -104,6 +104,7 @@ the full split).
 |---|---|---|
 | Full suite, project venv | **279 passed** at the Phase 1.2 commit; **310 passed** after Phase 2 (lambdarank, rerank modules) | `make test` |
 | Full suite, a *fresh* venv built from the pinned `requirements.txt` | **279 passed** with 64 pins (C-011); **310 passed** with 65 pins, lightgbm 4.7.0 added (C-016); `pip check` clean and `pip freeze` equal to the pins both times | see C-011, C-016 |
+| **Ship check: fresh `git clone` of `a2-click-logs` at `d00b29f`, venv from the pins, `make test`** (PLAN.md ship list), 2026-09-17 | **366 passed, 12 skipped** (the data-dependent tests skip without `make data`; none fail), 5.98 s | `git clone --branch a2-click-logs … && make env && make test` |
 | Full suite, **clean clone on Aayush's machine** (P0 step 2), 2026-09-12 | **318 passed**, 0 failed, 6.48 s; `pip check` clean; `pip freeze` equal to the 65 pins. Python 3.12.3, 15 GB RAM, no GPU | `make test` (318 passed again after `make` was installed; the first run used the recipe directly, `PYTHONPATH=. .venv/bin/pytest tests/ -v`) |
 | Planted bugs, each run alone in an otherwise-correct implementation | every one fails its dedicated test (per-bug tables in `SPEC.md` §11.1–§11.8) | scratch scripts, logged in `AI_USAGE.md` |
 
