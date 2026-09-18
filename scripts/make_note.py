@@ -43,10 +43,17 @@ strong { font-weight: 600; }
 
 
 def inline_images(html: str) -> str:
+    """Inline report/*.png|jpg as data URIs; drop a <figure> whose image is not on disk yet (the
+    screenshots arrive when the leaderboards score), and say so on stderr."""
+    def drop_missing(m):
+        src = re.search(r'src="([^"]+)"', m.group(0))
+        if src and not (ROOT / "report" / src.group(1)).exists():
+            print(f"  figure dropped, no file: report/{src.group(1)}", file=sys.stderr)
+            return ""
+        return m.group(0)
+    html = re.sub(r"<figure>.*?</figure>", drop_missing, html, flags=re.S)
     def sub(m):
         p = ROOT / "report" / m.group(1)
-        if not p.exists():
-            return m.group(0).replace("src=", "data-missing=")
         mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
         return f'src="data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"'
     return re.sub(r'src="([^"]+\.(?:png|jpg|jpeg))"', sub, html)

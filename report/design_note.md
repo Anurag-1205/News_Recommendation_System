@@ -76,8 +76,8 @@ Re-ranking lifts EB-NeRD by +0.155 AUC over its best single generator; on MIND t
 
 | | ours (validation, every impression, full slates) | published | gap, explained |
 |---|---|---|---|
-| EB-NeRD NRMS, 5 epochs, xlm-roberta-large | **0.5600** [0.5588, 0.5612] AUC · MRR 0.3491 · nDCG@10 0.4668 | 0.6103 / 0.3975 / 0.5124 (Kruse et al. 2024, Table 3, hidden test set, trained on `large`) | −0.050: 12× less training data, validation vs hidden test; the published recipe also silently drops the word embeddings it builds (C-021), which we pass |
-| MIND NRMS, 5 epochs, GloVe | **0.6667** [0.6647, 0.6688] · 0.3220 · 0.4184 | 0.6776 / 0.3305 / 0.4163 (Wu et al. 2020, Table 3, full-MIND test, half the users, mean of 10 runs) | −0.011: 10× less training data; same implementation and initialisation |
+| EB-NeRD NRMS, 5 epochs, xlm-roberta-large | **0.5600** [0.5588, 0.5612] AUC · MRR 0.3491 · nDCG@10 0.4668 | 0.6103 / 0.3975 / 0.5124 (Kruse et al. 2024, *EB-NeRD*, RecSys Challenge, Table 3 — hidden test set, trained on `large`) | −0.050: 12× less training data, validation vs hidden test; the published recipe also silently drops the word embeddings it builds (C-021), which we pass |
+| MIND NRMS, 5 epochs, GloVe | **0.6667** [0.6647, 0.6688] · 0.3220 · 0.4184 | 0.6776 / 0.3305 / 0.4163 (Wu et al. 2020, *MIND*, ACL, Table 3 — full-MIND test, half the users, mean of 10 runs) | −0.011: 10× less training data; same implementation and initialisation |
 
 The reproduction's own finding: NRMS trails the reranker by **0.113 AUC on EB-NeRD but only 0.008 on MIND**. NRMS knows nothing about article age or popularity, and A1 had found EB-NeRD "recency-dominated". That asymmetry chose the change.
 
@@ -178,10 +178,3 @@ Every task started with an oracle, and the oracles earned their keep: the batch/
 ## Appendix A — Reproduce
 
 `make env` · `make fetch-small` · `make fetch-testset` · `make fetch-mind` (HF login) · `make data` · `make test` (376 tests, incl. the leakage assertions) · `make eval SCORES=data/scores/<ds>/<split>/reranker_final.parquet` · `make paired A=… B=…` · `make bench DATASET=ebnerd|mind` · `make note`. GPU work runs as Kaggle kernels under `scripts/kaggle/` (NRMS baselines and variants, the assets kernel, the two submission kernels); every run — 40, failures included — is a row in `scripts/kaggle/RUN_LEDGER.md` with its commit, mode, outcome and log. External code is pinned: `jppol-ai/ebnerd-benchmark` `5164e2c`, `recommenders-team/recommenders` `0bb4b36`. Seeds: 0 (sampling, bootstrap), 123/42 (NRMS). Score files, models and submissions live under gitignored `data/`; the design-note sources are `report/design_note.md` + `scripts/make_note.py`.
-
-## Appendix B — References
-
-Kruse, J., Lindskow, K., Kalloori, S., Polignano, M., Pomo, C., Srivastava, A., Uppal, A., Andersen, M. R., Frellsen, J. (2024). EB-NeRD: A large-scale dataset for news recommendation. *Proc. ACM RecSys Challenge 2024.* — Table 3: NRMS 61.03 / 39.75 / 44.45 / 51.24.
-Wu, C., Wu, F., Ge, S., Qi, T., Huang, Y., Xie, X. (2019). Neural news recommendation with multi-head self-attention. *EMNLP-IJCNLP*, 6389–6394.
-Wu, F., Qiao, Y., Chen, J.-H., et al. (2020). MIND: A large-scale dataset for news recommendation. *ACL*, 3597–3606. — Table 3: NRMS 67.76 / 33.05 / 35.94 / 41.63; §5.1 setup.
-Repositories: `github.com/jppol-ai/ebnerd-benchmark` (5164e2c); `github.com/recommenders-team/recommenders` (0bb4b36); our code `github.com/Anurag-1205/News_Recommendation_System`, branch `a2-click-logs`.

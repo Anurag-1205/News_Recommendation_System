@@ -277,7 +277,7 @@ with the ablation and CIs; serving and scale findings; where it breaks at 10×.
 - [x] `README.md` one-command reproduce, verified by a fresh clone on Aayush's machine (17 Sep: 366 passed, 12 skipped)
 - [ ] `SPEC.md`, `RESULTS.md`, `AI_USAGE.md` complete; AI-generated vs human-written code marked
 - [x] Leakage test green; the "with vs without serving-unavailable features" row is in the note (§3.6)
-- [ ] Both leaderboard screenshots in the note
+- [◐] Leaderboard screenshots in the note: MIND embedded (18 Sep); EB-NeRD pending Codabench scoring
 - [ ] Chat exports and prompts for **both** team members collected (Q7.4)
 - [ ] No force-push after the deadline
 
