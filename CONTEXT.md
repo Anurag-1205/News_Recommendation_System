@@ -1281,6 +1281,30 @@ Entry format:
 - Affects: `report/design_note.md`, `scripts/make_note.py`, `Makefile` (`note`), `README.md`
 - Status: active
 
+### C-041 · MIND leaderboard 0.5606: below A1's 0.5714 — the SPEC §7 selection failure, recorded as measured
+- Date / author: 2026-09-18 · Aayush Pandey (Claude Code); MIND uploaded from Aayush's Codabench
+  account (submission #930531, 17 Sep 21:46, Finished, AUC 0.5606). EB-NeRD uploaded 17 Sep,
+  still "Submitted" (unscored) on 18 Sep — recorded as such in the note.
+- Finding: `config.FINAL` MIND is offline 0.6747 (all dev) → leaderboard 0.5606, **offset −0.114**.
+  A1 v4, the same seven features, was offline 0.6447 → 0.5714 (offset −0.073). A2 gained +0.030
+  on the adjacent dev split and lost −0.011 on the test week. This is the mechanism SPEC §7
+  documents (trailing behavioural counts populated on adjacent dev, frozen at the training
+  boundary on test) — and CLAUDE.md §4's invariant "model selection mimics the test gap" was not
+  applied when P2 chose the objective/features on adjacent dev (RESULTS Q2, C-016–C-018).
+- Decision: **reported as measured** in RESULTS Q5.6 and the note (§3.7, §5). Grading is on
+  correctness, design and analysis, never on rank (CLAUDE.md §1); the honest number plus the
+  restated mechanism is the deliverable. A gap-aware re-selection and re-submission (Anurag's
+  stream; ~half a day plus 50 min of test inference and Codabench scoring) is possible before
+  the Sat 19 freeze but is **not** started by default: it would be a second, differently-selected
+  system days before the deadline, and its offline number could not be compared with the note's
+  tables without redoing Q2. Aayush decides (asked 18 Sep).
+- What is *not* the cause, checked: the archive (member `prediction.txt`, validated permutation
+  lists, line count = impressions); the model (the served refit reproduces Q2's 0.6747; the
+  submission driver builds chunks through the measured `build()`, C-038); the split (test is
+  16–22 Nov, the training counts end 14 Nov 23:59, as in A1).
+- Affects: `RESULTS.md` Q5.6, `report/design_note.md` §3.7 and §5
+- Status: active
+
 ---
 
 ## 3 · Inherited from A1 (facts, not decisions to revisit)

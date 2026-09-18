@@ -830,8 +830,15 @@ Both zips are built and verified. What remains is the two Codabench uploads and 
 
 | dataset | competition | zip | leaderboard score | screenshot |
 |---|---|---|---|---|
-| MIND | [13967](https://www.codabench.org/competitions/13967/) | **`mind_reranker_final_v2.zip`** (107.5 MB, sha256 `7a2ad763…4983`), member `prediction.txt` | _pending_ | _pending_ |
-| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | `ebnerd_reranker_final.zip` (229.7 MB, sha256 `51f531a5…3bf37`), member `predictions.txt` | _pending_ | _pending_ |
+| MIND | [13967](https://www.codabench.org/competitions/13967/) | **`mind_reranker_final_v2.zip`** (107.5 MB, sha256 `7a2ad763…4983`), member `prediction.txt` | **AUC 0.5606** — submission #930531, 2026-09-17 21:46, Finished (Aayush's account) | `report/leaderboard_mind.png` |
+| EB-NeRD | [2469](https://www.codabench.org/competitions/2469/) | `ebnerd_reranker_final.zip` (229.7 MB, sha256 `51f531a5…3bf37`), member `predictions.txt` | uploaded 2026-09-17; status **"Submitted", not scored** as of 18 Sep (A1's EB-NeRD scoring took 2.4 h; this one is far longer) | `report/leaderboard_ebnerd.png` (status as seen) |
+
+**Offset.** MIND: offline 0.6747 (all 73,152 dev impressions) → leaderboard **0.5606**, offset
+**−0.114**. A1's best MIND entry, v4 with the same seven features, was offline 0.6447 → 0.5714
+(offset −0.073). So A2's model is +0.030 better on the adjacent dev split and −0.011 worse on the
+test week. This is SPEC §7's failure mode again: `config.FINAL` was selected on the adjacent dev
+split (RESULTS Q2), where trailing behavioural counts are still populated; on the test week they
+are frozen at the training boundary. Recorded as C-041 with the follow-up.
 
 **Upload 1 (MIND, 17 Sep, Aayush) — FAILED, packaging not scoring.** Codabench's scorer opens
 `/app/input/res/prediction.txt`; the archive built on the 15th held `predictions.txt` (plural).

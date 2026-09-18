@@ -1,9 +1,9 @@
 # Learning from Click-Logs on EB-NeRD and MIND
 
 **CS4.406 Information Retrieval and Extraction — Assignment 2, design note**
-Anurag Kaushal (2025202013) · Aayush Pandey (<roll>) · 18 September 2026 · branch `a2-click-logs`
+Anurag Kaushal (2025202013) · Aayush Pandey (2025201058) · 18 September 2026 · branch `a2-click-logs`
 
-**Scope.** Q6 of the brief: what we built and why, the baseline reproduced and then changed with an ablation and paired confidence intervals, the serving and scale measurements, and where the system breaks at ten times the load. Every number here has a command and a record in `RESULTS.md`; every decision has a numbered entry in `CONTEXT.md` (C-001–C-039); interfaces and verification are in `SPEC.md`. Nothing in this note was produced without a test or oracle that would have failed before the change.
+**Scope.** Q6 of the brief: what we built and why, the baseline reproduced and then changed with an ablation and paired confidence intervals, the serving and scale measurements, and where the system breaks at ten times the load. Every number here has a command and a record in `RESULTS.md`; every decision has a numbered entry in `CONTEXT.md` (C-001–C-041); interfaces and verification are in `SPEC.md`. Nothing in this note was produced without a test or oracle that would have failed before the change.
 
 **Statistical convention.** Every headline metric carries a bootstrap 95 % CI over impressions (1,000 resamples). A *difference* between two systems is always a **paired** bootstrap on the same impressions; the word "beats" appears only where that interval excludes zero, and the one Q3 claim was reviewed by the team member who did not build it (C-033).
 
@@ -123,13 +123,15 @@ The usual Q9 story is an inflated offline number. Here the forbidden features ma
 
 Both test files were scored with `config.FINAL` by a resumable driver on Kaggle CPU kernels (MIND 2,370,727 impressions in 50 min; EB-NeRD 13,536,710 in 118 min after a 37 % `avg_doc_length` fix, C-038), validated locally against the test files' own ids and slate lengths, and uploaded from a member account (the competitions have no team feature, C-023). A1's best entries were MIND 0.5714 and EB-NeRD 0.5110; A1 measured a dev-to-leaderboard offset of −0.03 to −0.09 AUC for feature models (SPEC §7), so the offline 0.67 figures are expected to land lower on the test week.
 
-| competition | file | leaderboard AUC | date |
-|---|---|---|---|
-| MIND (13967) | `mind_reranker_final_v2.zip` | **TBD** | TBD |
-| RecSys 2024 / EB-NeRD (2469) | `ebnerd_reranker_final.zip` | **TBD** | TBD |
+| competition | file | offline (dev / validation) | leaderboard AUC | offset | A1's best entry |
+|---|---|---|---|---|---|
+| MIND (13967), submission #930531, 2026-09-17 21:46, status Finished | `mind_reranker_final_v2.zip` | 0.6747 | **0.5606** | **−0.114** | 0.5714 (v4, offline 0.6447, offset −0.073) |
+| RecSys 2024 / EB-NeRD (2469), uploaded 2026-09-17 | `ebnerd_reranker_final.zip` | 0.6734 | **pending** — the entry has shown "Submitted" since upload without being scored (A1's EB-NeRD scoring took 2.4 h; this one had not finished at the time of writing, 18 Sep) | — | 0.5110 |
 
-<figure><img src="leaderboard_mind.png" alt="MIND leaderboard"><figcaption>Figure 1. MIND leaderboard entry (Codabench 13967).</figcaption></figure>
-<figure><img src="leaderboard_ebnerd.png" alt="EB-NeRD leaderboard"><figcaption>Figure 2. RecSys 2024 / EB-NeRD leaderboard entry (Codabench 2469).</figcaption></figure>
+**The MIND number is worse than A1's, and the reason is the one A1 documented.** Offline, `config.FINAL` is +0.030 AUC above A1's v4 model (same seven features); on the test week it is −0.011 below it, and the dev-to-leaderboard offset grew from −0.073 to −0.114. SPEC §7 records that A1 lost 0.090 AUC to selecting on the *adjacent* dev split, whose behavioural counts are still fresh while the test week's are frozen at the training boundary, and prescribes the gap-aware protocol as the authority for model selection. P2 selected `config.FINAL` — objective, features, the h = ∞ grid — on the adjacent dev split (§3.1), so the offline gain was measured in the regime the test file does not have. The number is reported as measured; it is the assignment's own invariant, restated with a fresh data point, and the first thing we would change (§5).
+
+<figure><img src="leaderboard_mind.png" alt="MIND leaderboard"><figcaption>Figure 1. MIND leaderboard entry (Codabench 13967): submission #930531, 17 Sep 2026 21:46, Finished, AUC 0.5606.</figcaption></figure>
+<figure><img src="leaderboard_ebnerd.png" alt="EB-NeRD leaderboard"><figcaption>Figure 2. RecSys 2024 / EB-NeRD (Codabench 2469): the entry as it stood at the time of writing — "Submitted", not yet scored.</figcaption></figure>
 
 ## 4. Serving and scale (Q4)
 
@@ -164,6 +166,8 @@ The serving state is the locked reranker assembled into a per-request path (`src
 | **QPS** | unchanged | unchanged | unchanged | cores scale linearly: (a) ≈ 30–40 cores at 10 k QPS; (b) ≈ 1,000–1,200 |
 
 The stage that decides the 10× question is not the model — GBDT scoring is 1–3 ms and O(K) — but the lexical index and the event-level feature store. The system we ship scales on every axis with only memory to buy; the literal retrieve-then-rerank path fails first, on a component we inherited from A1, and §2's recall measurement says it is also the wrong candidate generator for news.
+
+**And the first thing we would change is not about scale.** §3.7's MIND result says the offline gain over A1 was measured in the wrong regime: model selection for `config.FINAL` used the adjacent dev split, against our own SPEC §7. The fix is procedural and cheap — select objective and features under the gap-aware protocol (counts frozen a day before the training day, evaluation a day after), where A1 measured the direction of leaderboard moves correctly — and it should have been the P2 exit gate.
 
 ## 6. What the process caught
 

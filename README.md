@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Team** | Anurag Kaushal (2025202013) · Aayush Pandey (<roll>) |
+| **Team** | Anurag Kaushal (2025202013) · Aayush Pandey (2025201058) |
 | **Repository** | https://github.com/Anurag-1205/News_Recommendation_System, branch `a2-click-logs` |
 | **Submission** | Team of 2 · due 20 September 2026 |
 | **Builds on** | Assignment 1, frozen on `main` at `be15ee6` |
