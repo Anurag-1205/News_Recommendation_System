@@ -16,7 +16,7 @@ Three sections:
 
 ## 1 · Current state
 
-_Last updated: 2026-09-17 by Aayush (agent: Claude Code)_
+_Last updated: 2026-09-19 14:10 by Aayush (agent: Claude Code) — code freeze 18:00 today_
 
 | | |
 |---|---|
@@ -27,7 +27,7 @@ _Last updated: 2026-09-17 by Aayush (agent: Claude Code)_
 | Aayush Pandey | **P6 drafted (C-040): `make note` → 6 pages; fill leaderboard scores + screenshots + `<roll>`.** P3, P4 done; P5 remainder inherited 17 Sep (C-039): both submission zips verified locally; MIND repackaged with the right member name. **Now:** upload `mind_reranker_final_v2.zip` → 13967 and `ebnerd_reranker_final.zip` → 2469, screenshots, RESULTS Q5.6 lines; review Anurag's Q5 claims (C-035); then P6 |
 | Compute | 12.2 h + 2.5 h of GPU used this week across Aayush's two accounts; laptop rule: nothing may allocate (1,000 × 245k) at once (C-026) |
 | Blocked on | **Anurag → the push.** The kernels clone `a2-click-logs` from GitHub, so `scripts/submit_a2.py` and the BM25 fix must be on origin before either kernel can run. Aayush: nothing |
-| Next up | **Aayush:** Codabench uploads (MIND v2 zip, EB-NeRD zip) → screenshots into `report/` → leaderboard lines in RESULTS Q5.6 and the note → `make note` → change the sudo password, export chats for Q7.4 → final commit. **Anurag (if back):** read his sections of the note. Code freeze Sat 19 18:00 |
+| Next up | **All code, docs and the note are final as of 19 Sep 14:10 (MIND 0.5606 recorded, C-041).** Remaining, manual: EB-NeRD leaderboard result if Codabench scores it (RESULTS Q5.6 + note §3.7 + `report/leaderboard_ebnerd.png`, then `make note`); chat exports for both members (Q7.4, outside the repo); Moodle bundle Sunday. **No force-push after the deadline.** |
 
 ---
 

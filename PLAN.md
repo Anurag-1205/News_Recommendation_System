@@ -275,7 +275,7 @@ with the ablation and CIs; serving and scale findings; where it breaks at 10×.
 
 - [x] Code pushed; no `*.zip *.pt *.ckpt data/ __pycache__/` anywhere in history (audited 17 Sep, C-040)
 - [x] `README.md` one-command reproduce, verified by a fresh clone on Aayush's machine (17 Sep: 366 passed, 12 skipped)
-- [ ] `SPEC.md`, `RESULTS.md`, `AI_USAGE.md` complete; AI-generated vs human-written code marked
+- [x] `SPEC.md` (§1–§17), `RESULTS.md` (Q1–Q5, Q9, P0, Q4), `AI_USAGE.md` (26 entries, both members, each marking AI-generated vs reviewed/hand-written) complete — 19 Sep
 - [x] Leakage test green; the "with vs without serving-unavailable features" row is in the note (§3.6)
 - [◐] Leaderboard screenshots in the note: MIND embedded (18 Sep); EB-NeRD pending Codabench scoring
 - [ ] Chat exports and prompts for **both** team members collected (Q7.4)
